@@ -157,6 +157,11 @@ async function createSpreadsheet() {
 async function getSpreadsheetId() {
   let id = readStoredSpreadsheetId();
   if (id) return id;
+  if (process.env.VERCEL) {
+    throw new Error(
+      'Falta GOOGLE_SHEETS_ID en Vercel. Configura esa variable con el ID de la hoja donde están tus eventos para ver la data existente.'
+    );
+  }
   id = await createSpreadsheet();
   return id;
 }

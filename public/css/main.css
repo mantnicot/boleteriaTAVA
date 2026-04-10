@@ -392,6 +392,22 @@ main.main-content {
   display: block;
 }
 
+.instagram-fallback-card {
+  display: grid;
+  gap: 0.45rem;
+  text-align: center;
+  color: #4b1d26;
+}
+
+.instagram-fallback-card p {
+  margin: 0;
+}
+
+.instagram-fallback-copy {
+  font-size: 0.82rem;
+  opacity: 0.86;
+}
+
 .intro-embed-frame--tiktok {
   overflow: auto;
   display: flex;

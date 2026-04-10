@@ -215,8 +215,16 @@
     setSubBars(h === 'inicio' ? '' : h);
     setNavActive(h === 'inicio' ? '' : h);
 
-    if (authState.loggedIn && h === 'boletas') refreshBoletaEventosSelect();
-    if (authState.loggedIn && h === 'reportes') refreshReportes();
+    if (authState.loggedIn && h === 'boletas') {
+      refreshBoletaEventosSelect().catch(async (e) => {
+        await showAlert('No fue posible cargar eventos', e.message || String(e));
+      });
+    }
+    if (authState.loggedIn && h === 'reportes') {
+      refreshReportes().catch(async (e) => {
+        await showAlert('No fue posible cargar reportes', e.message || String(e));
+      });
+    }
   }
 
   function renderFechasTable(tbodyId, list, onDel) {
