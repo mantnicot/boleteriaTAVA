@@ -140,6 +140,7 @@
     const loginPanel = $('#intro-login-panel');
     const userPill = $('#auth-user-pill');
     const logoutBtn = $('#btn-logout');
+    const allowedPanel = $('#allowed-emails-panel');
 
     const logged = !!authState.loggedIn;
     if (nav) nav.classList.toggle('hidden', !logged);
@@ -150,6 +151,46 @@
       userPill.classList.toggle('hidden', !logged);
     }
     if (logoutBtn) logoutBtn.classList.toggle('hidden', !logged);
+    if (allowedPanel) allowedPanel.classList.toggle('hidden', !logged);
+  }
+
+  function renderAllowedEmails(items) {
+    const list = $('#allowed-email-list');
+    if (!list) return;
+    list.innerHTML = '';
+    const rows = Array.isArray(items) ? items : [];
+    if (rows.length === 0) {
+      list.innerHTML = '<span class="allowed-email-item">Sin restricciones (cualquier correo válido)</span>';
+      return;
+    }
+    rows.forEach((row) => {
+      const item = document.createElement('span');
+      item.className = 'allowed-email-item';
+      const canRemove = row.source !== 'env';
+      item.innerHTML = `${escapeHtml(row.email)} <span class="allowed-email-src">${escapeHtml(row.source)}</span>${
+        canRemove ? ' <button type="button" aria-label="Eliminar">&times;</button>' : ''
+      }`;
+      if (canRemove) {
+        const btn = item.querySelector('button');
+        btn?.addEventListener('click', async () => {
+          try {
+            const out = await api(`/api/auth/allowed-emails?email=${encodeURIComponent(row.email)}`, {
+              method: 'DELETE',
+            });
+            renderAllowedEmails(out.items);
+          } catch (e) {
+            await showAlert('No se pudo eliminar', e.message || String(e));
+          }
+        });
+      }
+      list.appendChild(item);
+    });
+  }
+
+  async function loadAllowedEmails() {
+    if (!authState.loggedIn) return;
+    const out = await api('/api/auth/allowed-emails');
+    renderAllowedEmails(out.items);
   }
 
   function route() {
@@ -858,10 +899,32 @@
           authState.loggedIn = !!out.loggedIn;
           authState.email = out.email || email;
           applyAuthUi();
+          await loadAllowedEmails().catch(() => {});
           location.hash = '#eventos';
           route();
         } catch (e) {
           await showAlert('No fue posible ingresar', e.message || String(e));
+        }
+      });
+    }
+
+    const allowedForm = $('#allowed-email-form');
+    if (allowedForm) {
+      allowedForm.addEventListener('submit', async (evn) => {
+        evn.preventDefault();
+        const input = $('#allowed-email-input');
+        const email = (input?.value || '').trim().toLowerCase();
+        if (!email) return;
+        try {
+          const out = await api('/api/auth/allowed-emails', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+          });
+          if (input) input.value = '';
+          renderAllowedEmails(out.items);
+        } catch (e) {
+          await showAlert('No se pudo agregar', e.message || String(e));
         }
       });
     }
@@ -875,9 +938,14 @@
         authState.loggedIn = false;
         authState.email = '';
         applyAuthUi();
+        renderAllowedEmails([]);
         location.hash = '#inicio';
         route();
       });
+    }
+
+    if (authState.loggedIn) {
+      await loadAllowedEmails().catch(() => {});
     }
 
     const btnCerrar = $('#btn-cerrar-app');

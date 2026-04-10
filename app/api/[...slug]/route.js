@@ -13,6 +13,7 @@ const { sendBoletaEmail, isSmtpConfigured } = require('../../../server/mail');
 const { buildTotalEventosExcel } = require('../../../server/excelReport');
 const validation = require('../../../server/validation');
 const googleAuth = require('../../../server/auth');
+const allowedEmails = require('../../../server/allowedEmails');
 
 const SESSION_COOKIE = 'tava_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
@@ -26,21 +27,7 @@ function isValidEmail(email) {
 }
 
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase();
-}
-
-function getAllowedEmails() {
-  const raw = process.env.APP_LOGIN_ALLOWED_EMAILS || '';
-  return raw
-    .split(',')
-    .map((s) => normalizeEmail(s))
-    .filter(Boolean);
-}
-
-function isEmailAllowed(email) {
-  const allowed = getAllowedEmails();
-  if (allowed.length === 0) return true;
-  return allowed.includes(normalizeEmail(email));
+  return allowedEmails.normalizeEmail(email);
 }
 
 function getSessionSecret() {
@@ -117,7 +104,9 @@ function readSessionEmail(request) {
 
 function requiresAuth(path) {
   if (pathIs(path, 'health')) return false;
-  if (path[0] === 'auth') return false;
+  if (pathIs(path, 'auth', 'login')) return false;
+  if (pathIs(path, 'auth', 'me')) return false;
+  if (pathIs(path, 'auth', 'logout')) return false;
   return true;
 }
 
@@ -276,6 +265,13 @@ export async function GET(request, { params }) {
         email: sessionEmail || '',
       });
     }
+    if (pathIs(path, 'auth', 'allowed-emails')) {
+      if (!sessionEmail) return authRequired();
+      return json({
+        ok: true,
+        items: allowedEmails.listAllowedEmailsDetailed(),
+      });
+    }
     if (requiresAuth(path) && !sessionEmail) return authRequired();
 
     if (pathIs(path, 'setup')) {
@@ -393,7 +389,7 @@ export async function POST(request, { params }) {
       if (!isValidEmail(email)) {
         return json({ error: 'Ingresa un correo válido.' }, 400);
       }
-      if (!isEmailAllowed(email)) {
+      if (!allowedEmails.isAllowedEmail(email)) {
         return json({ error: 'Este correo no está autorizado para ingresar.' }, 403);
       }
       const token = signSession(email);
@@ -408,6 +404,16 @@ export async function POST(request, { params }) {
         maxAge: SESSION_TTL_SECONDS,
       });
       return res;
+    }
+    if (pathIs(path, 'auth', 'allowed-emails')) {
+      if (!sessionEmail) return authRequired();
+      const body = (await request.json().catch(() => ({}))) || {};
+      const email = normalizeEmail(body.email);
+      if (!isValidEmail(email)) {
+        return json({ error: 'Ingresa un correo válido.' }, 400);
+      }
+      const items = allowedEmails.addManagedAllowedEmail(email);
+      return json({ ok: true, items });
     }
 
     if (pathIs(path, 'auth', 'logout')) {
@@ -651,6 +657,16 @@ export async function DELETE(request, { params }) {
         maxAge: 0,
       });
       return res;
+    }
+    if (pathIs(path, 'auth', 'allowed-emails')) {
+      if (!sessionEmail) return authRequired();
+      const url = new URL(request.url);
+      const email = normalizeEmail(url.searchParams.get('email'));
+      if (!isValidEmail(email)) {
+        return json({ error: 'Debes indicar un correo válido para eliminar.' }, 400);
+      }
+      const items = allowedEmails.removeManagedAllowedEmail(email);
+      return json({ ok: true, items });
     }
     if (requiresAuth(path) && !sessionEmail) return authRequired();
     if (path[0] !== 'eventos' || path.length !== 2) {

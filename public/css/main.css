@@ -400,6 +400,22 @@ main.main-content {
   padding: 0.5rem;
 }
 
+.tiktok-fallback-card {
+  display: grid;
+  gap: 0.45rem;
+  text-align: center;
+  color: #4b1d26;
+}
+
+.tiktok-fallback-card p {
+  margin: 0;
+}
+
+.tiktok-fallback-copy {
+  font-size: 0.82rem;
+  opacity: 0.86;
+}
+
 .intro-embed-link {
   display: block;
   text-align: center;
@@ -491,6 +507,64 @@ main.main-content {
   margin: 0.75rem 0 0;
   font-size: 0.78rem;
   color: rgba(253, 235, 208, 0.84);
+}
+
+.allowed-emails-panel {
+  margin: 1rem auto 0;
+  max-width: 540px;
+  background: #fff;
+  border: 2px solid var(--burgundy);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px var(--shadow);
+  padding: 1rem 1rem 0.9rem;
+}
+
+.allowed-emails-panel h3 {
+  margin: 0 0 0.65rem;
+  color: var(--burgundy-dark);
+  font-size: 0.98rem;
+}
+
+.allowed-email-form {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.45rem;
+  margin-bottom: 0.65rem;
+}
+
+.allowed-email-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.allowed-email-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  border-radius: 999px;
+  background: #f4e7ea;
+  color: #4b1d26;
+  border: 1px solid #d3b8bf;
+  font-size: 0.78rem;
+}
+
+.allowed-email-src {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  opacity: 0.74;
+}
+
+.allowed-email-item button {
+  border: none;
+  background: transparent;
+  color: var(--danger);
+  font-size: 0.95rem;
+  cursor: pointer;
+  line-height: 1;
+  padding: 0;
 }
 
 .form-grid {
