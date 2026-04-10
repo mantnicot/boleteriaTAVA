@@ -120,6 +120,15 @@ function authRequired() {
   );
 }
 
+function isOAuthClientError(error) {
+  const msg = String(error?.message || '');
+  const data = error?.response?.data;
+  const serialized = `${msg} ${JSON.stringify(data || {})}`;
+  return /unauthorized_client|invalid_grant|invalid_client|deleted_client|access_denied/i.test(
+    serialized
+  );
+}
+
 function parseJsonField(raw, fallback) {
   if (raw == null || raw === '') return fallback;
   if (typeof raw === 'object') return raw;
@@ -185,10 +194,13 @@ async function buildPdfForBoleta(boleta, event) {
 }
 
 function apiError(error) {
-  if (error && error.code === 'OAUTH_REQUIRED') {
+  if (error && (error.code === 'OAUTH_REQUIRED' || isOAuthClientError(error))) {
     return json(
       {
-        error: error.message,
+        error:
+          error.code === 'OAUTH_REQUIRED'
+            ? error.message
+            : 'La autorización de Google no es válida en este entorno. Vuelve a conectar tu cuenta en /auth/google.',
         code: 'OAUTH_REQUIRED',
         authUrl: '/auth/google',
       },
