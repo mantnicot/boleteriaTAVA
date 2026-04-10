@@ -10,7 +10,6 @@ Configura estas variables en el proyecto de Vercel:
 - `GOOGLE_OAUTH_TOKENS_JSON` (recomendado para no depender de archivos locales)
 - `GOOGLE_SHEETS_ID` (recomendado en producción)
 - `GOOGLE_DRIVE_FOLDER_ID`
-- `TZ`
 - `SMTP_HOST`
 - `SMTP_PORT`
 - `SMTP_SECURE`
