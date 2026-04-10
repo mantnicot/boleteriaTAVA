@@ -31,6 +31,96 @@ body {
   position: relative;
 }
 
+.curtain-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 15000;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.curtain-overlay.hidden {
+  display: none;
+}
+
+.curtain-panel {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 51%;
+  background:
+    repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.08) 0,
+      rgba(255, 255, 255, 0.08) 6px,
+      rgba(255, 255, 255, 0) 6px,
+      rgba(255, 255, 255, 0) 20px
+    ),
+    linear-gradient(180deg, #8a1530 0%, #5c0c1e 65%, #3b0813 100%);
+  box-shadow: inset -8px 0 25px rgba(0, 0, 0, 0.35);
+}
+
+.curtain-panel--left {
+  left: 0;
+}
+
+.curtain-panel--right {
+  right: 0;
+  box-shadow: inset 8px 0 25px rgba(0, 0, 0, 0.35);
+}
+
+.curtain-title {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #f7e4bf;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  font-size: clamp(1rem, 3vw, 1.45rem);
+  font-weight: 800;
+  text-shadow: 0 6px 20px rgba(0, 0, 0, 0.55);
+}
+
+.curtain-overlay.opening .curtain-panel--left {
+  animation: openCurtainLeft 1.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.curtain-overlay.opening .curtain-panel--right {
+  animation: openCurtainRight 1.7s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.curtain-overlay.opening .curtain-title {
+  animation: fadeCurtainTitle 1.2s ease forwards;
+}
+
+@keyframes openCurtainLeft {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-110%);
+  }
+}
+
+@keyframes openCurtainRight {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(110%);
+  }
+}
+
+@keyframes fadeCurtainTitle {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
 .bg-blur-layer {
   position: fixed;
   inset: 0;
@@ -113,7 +203,7 @@ body {
   background: rgba(0, 0, 0, 0.26);
   border: 1px solid rgba(255, 255, 255, 0.28);
   color: #fff;
-  font-size: 0.74rem;
+  font-size: 0.76rem;
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
@@ -134,6 +224,22 @@ body {
 
 .header-logout-btn:hover {
   background: rgba(0, 0, 0, 0.5);
+}
+
+.action-pop {
+  animation: actionPop 0.34s ease;
+}
+
+@keyframes actionPop {
+  0% {
+    transform: scale(0.96);
+  }
+  55% {
+    transform: scale(1.06);
+  }
+  100% {
+    transform: scale(1);
+  }
 }
 
 .site-header h1 {
@@ -469,7 +575,7 @@ main.main-content {
 
 .theater-login-panel {
   margin: 0.7rem auto 0;
-  max-width: 540px;
+  max-width: 620px;
   background: linear-gradient(155deg, rgba(95, 22, 38, 0.95), rgba(32, 8, 14, 0.98));
   border: 1px solid rgba(244, 208, 127, 0.42);
   border-radius: 14px;
@@ -546,6 +652,55 @@ main.main-content {
   grid-template-columns: 1fr auto;
   gap: 0.45rem;
   margin-bottom: 0.65rem;
+}
+
+@media (max-width: 820px) {
+  .site-header {
+    padding-top: 2.3rem;
+  }
+
+  .header-session {
+    left: 0.5rem;
+    right: 4.8rem;
+    top: 0.4rem;
+    justify-content: flex-start;
+  }
+
+  .auth-user-pill {
+    max-width: min(60vw, 230px);
+  }
+
+  .header-close-btn {
+    top: 0.4rem;
+    right: 0.45rem;
+    padding: 0.3rem 0.6rem;
+  }
+
+  .main-nav {
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+  }
+
+  main.main-content {
+    padding: 1rem 0.6rem 1.4rem;
+  }
+
+  .intro-embed-frame {
+    min-height: 280px;
+    max-height: 460px;
+  }
+
+  .theater-login-panel {
+    padding: 1rem 0.9rem;
+  }
+
+  .allowed-email-form {
+    grid-template-columns: 1fr;
+  }
+
+  table.data {
+    font-size: 0.75rem;
+  }
 }
 
 .allowed-email-list {

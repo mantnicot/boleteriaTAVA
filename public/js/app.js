@@ -33,6 +33,7 @@
   let cacheEventos = [];
   let selectedBoletaEvent = null;
   const authState = { loggedIn: false, email: '' };
+  const curtainState = { playing: false };
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -143,15 +144,39 @@
     const allowedPanel = $('#allowed-emails-panel');
 
     const logged = !!authState.loggedIn;
+    document.body.classList.toggle('is-authenticated', logged);
     if (nav) nav.classList.toggle('hidden', !logged);
     if (lockMsg) lockMsg.classList.toggle('hidden', logged);
     if (loginPanel) loginPanel.classList.toggle('hidden', logged);
     if (userPill) {
-      userPill.textContent = logged ? authState.email : '';
+      userPill.textContent = logged ? `Ingresaste como: ${authState.email}` : '';
       userPill.classList.toggle('hidden', !logged);
     }
     if (logoutBtn) logoutBtn.classList.toggle('hidden', !logged);
     if (allowedPanel) allowedPanel.classList.toggle('hidden', !logged);
+  }
+
+  function playCurtainIntro() {
+    const overlay = $('#curtain-overlay');
+    if (!overlay || curtainState.playing) return;
+    curtainState.playing = true;
+    overlay.classList.remove('hidden');
+    overlay.classList.remove('opening');
+    void overlay.offsetWidth;
+    overlay.classList.add('opening');
+    window.setTimeout(() => {
+      overlay.classList.add('hidden');
+      overlay.classList.remove('opening');
+      curtainState.playing = false;
+    }, 1850);
+  }
+
+  function pulseActionTarget(el) {
+    if (!el || !(el instanceof HTMLElement)) return;
+    el.classList.remove('action-pop');
+    void el.offsetWidth;
+    el.classList.add('action-pop');
+    window.setTimeout(() => el.classList.remove('action-pop'), 360);
   }
 
   function renderAllowedEmails(items) {
@@ -320,8 +345,13 @@
         throw new Error('Debes iniciar sesión con correo para continuar.');
       }
       if (r.status === 401 && typeof data === 'object' && data.code === 'OAUTH_REQUIRED') {
-        window.location.href = data.authUrl || '/auth/google';
-        throw new Error('Redirigiendo a Google…');
+        const err = new Error(
+          (data.error || 'Debes reconectar Google para continuar.') +
+            '\n\nUsa el enlace "Conectar cuenta Google" en el pie de página y vuelve.'
+        );
+        err.code = 'OAUTH_REQUIRED';
+        err.authUrl = data.authUrl || '/auth/google';
+        throw err;
       }
       const err = typeof data === 'object' && data.error ? data.error : r.statusText;
       throw new Error(err);
@@ -340,8 +370,13 @@
       throw new Error('Debes iniciar sesión con correo para continuar.');
     }
     if (res.status === 401 && data.code === 'OAUTH_REQUIRED') {
-      window.location.href = data.authUrl || '/auth/google';
-      throw new Error('Redirigiendo a Google…');
+      const err = new Error(
+        (data.error || 'Debes reconectar Google para continuar.') +
+          '\n\nUsa el enlace "Conectar cuenta Google" en el pie de página y vuelve.'
+      );
+      err.code = 'OAUTH_REQUIRED';
+      err.authUrl = data.authUrl || '/auth/google';
+      throw err;
     }
     if (!res.ok) throw new Error(data.error || res.statusText);
     return data;
@@ -842,6 +877,10 @@
   });
 
   window.addEventListener('hashchange', route);
+  document.addEventListener('click', (ev) => {
+    const target = ev.target.closest('.btn, .icon-btn, .main-nav a, .header-logout-btn');
+    if (target) pulseActionTarget(target);
+  });
 
   async function init() {
     const qs = new URLSearchParams(window.location.search);
@@ -869,6 +908,10 @@
       authState.email = '';
     }
     applyAuthUi();
+    if (authState.loggedIn && !sessionStorage.getItem('tava-curtain-opened')) {
+      sessionStorage.setItem('tava-curtain-opened', '1');
+      playCurtainIntro();
+    }
 
     try {
       if (authState.loggedIn) {
@@ -907,6 +950,8 @@
           authState.loggedIn = !!out.loggedIn;
           authState.email = out.email || email;
           applyAuthUi();
+          sessionStorage.setItem('tava-curtain-opened', '1');
+          playCurtainIntro();
           await loadAllowedEmails().catch(() => {});
           location.hash = '#eventos';
           route();
@@ -945,6 +990,7 @@
         } catch (_) {}
         authState.loggedIn = false;
         authState.email = '';
+        sessionStorage.removeItem('tava-curtain-opened');
         applyAuthUi();
         renderAllowedEmails([]);
         location.hash = '#inicio';
