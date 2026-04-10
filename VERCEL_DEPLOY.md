@@ -8,6 +8,8 @@ Configura estas variables en el proyecto de Vercel:
 - `GOOGLE_CLIENT_SECRET`
 - `GOOGLE_REDIRECT_URI` (ejemplo: `https://tu-app.vercel.app/oauth2callback`)
 - `GOOGLE_OAUTH_TOKENS_JSON` (recomendado para no depender de archivos locales)
+- `APP_SESSION_SECRET` (clave larga para firmar sesión de login por correo)
+- `APP_LOGIN_ALLOWED_EMAILS` (correos autorizados separados por coma)
 - `GOOGLE_SHEETS_ID` (recomendado en producción)
 - `GOOGLE_DRIVE_FOLDER_ID`
 - `SMTP_HOST`

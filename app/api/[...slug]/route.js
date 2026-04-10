@@ -14,8 +14,121 @@ const { buildTotalEventosExcel } = require('../../../server/excelReport');
 const validation = require('../../../server/validation');
 const googleAuth = require('../../../server/auth');
 
+const SESSION_COOKIE = 'tava_session';
+const SESSION_TTL_SECONDS = 60 * 60 * 12;
+
 function json(data, status = 200) {
   return NextResponse.json(data, { status });
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(email || '').trim());
+}
+
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function getAllowedEmails() {
+  const raw = process.env.APP_LOGIN_ALLOWED_EMAILS || '';
+  return raw
+    .split(',')
+    .map((s) => normalizeEmail(s))
+    .filter(Boolean);
+}
+
+function isEmailAllowed(email) {
+  const allowed = getAllowedEmails();
+  if (allowed.length === 0) return true;
+  return allowed.includes(normalizeEmail(email));
+}
+
+function getSessionSecret() {
+  return (
+    process.env.APP_SESSION_SECRET ||
+    process.env.GOOGLE_CLIENT_SECRET ||
+    'tava-dev-secret-change-me'
+  );
+}
+
+function toBase64Url(input) {
+  return Buffer.from(input)
+    .toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/g, '');
+}
+
+function fromBase64Url(input) {
+  const base64 = String(input).replace(/-/g, '+').replace(/_/g, '/');
+  const pad = base64.length % 4 === 0 ? '' : '='.repeat(4 - (base64.length % 4));
+  return Buffer.from(base64 + pad, 'base64').toString('utf8');
+}
+
+function signSession(email) {
+  const payload = {
+    email: normalizeEmail(email),
+    exp: Math.floor(Date.now() / 1000) + SESSION_TTL_SECONDS,
+  };
+  const payloadB64 = toBase64Url(JSON.stringify(payload));
+  const sig = crypto.createHmac('sha256', getSessionSecret()).update(payloadB64).digest('base64url');
+  return `${payloadB64}.${sig}`;
+}
+
+function parseCookies(request) {
+  const raw = String(request.headers.get('cookie') || '');
+  const out = {};
+  raw.split(';').forEach((pair) => {
+    const idx = pair.indexOf('=');
+    if (idx <= 0) return;
+    const key = pair.slice(0, idx).trim();
+    const val = pair.slice(idx + 1).trim();
+    if (!key) return;
+    out[key] = decodeURIComponent(val);
+  });
+  return out;
+}
+
+function readSessionEmail(request) {
+  const cookies = parseCookies(request);
+  const token = cookies[SESSION_COOKIE];
+  if (!token) return null;
+  const parts = token.split('.');
+  if (parts.length !== 2) return null;
+  const [payloadB64, sig] = parts;
+
+  const expected = crypto
+    .createHmac('sha256', getSessionSecret())
+    .update(payloadB64)
+    .digest('base64url');
+
+  if (sig.length !== expected.length) return null;
+  if (!crypto.timingSafeEqual(Buffer.from(sig), Buffer.from(expected))) return null;
+
+  try {
+    const payload = JSON.parse(fromBase64Url(payloadB64));
+    if (!payload?.email || !payload?.exp) return null;
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return normalizeEmail(payload.email);
+  } catch {
+    return null;
+  }
+}
+
+function requiresAuth(path) {
+  if (pathIs(path, 'health')) return false;
+  if (path[0] === 'auth') return false;
+  return true;
+}
+
+function authRequired() {
+  return json(
+    {
+      error: 'Debes iniciar sesión con correo para acceder al sistema.',
+      code: 'AUTH_REQUIRED',
+    },
+    401
+  );
 }
 
 function parseJsonField(raw, fallback) {
@@ -152,9 +265,18 @@ function pathIs(path, ...parts) {
 
 export async function GET(request, { params }) {
   const path = asPath(params);
+  const sessionEmail = readSessionEmail(request);
 
   try {
     if (pathIs(path, 'health')) return json({ ok: true });
+    if (pathIs(path, 'auth', 'me')) {
+      return json({
+        ok: true,
+        loggedIn: Boolean(sessionEmail),
+        email: sessionEmail || '',
+      });
+    }
+    if (requiresAuth(path) && !sessionEmail) return authRequired();
 
     if (pathIs(path, 'setup')) {
       const hasOAuth = googleAuth.hasOAuthTokens();
@@ -263,7 +385,44 @@ export async function GET(request, { params }) {
 
 export async function POST(request, { params }) {
   const path = asPath(params);
+  const sessionEmail = readSessionEmail(request);
   try {
+    if (pathIs(path, 'auth', 'login')) {
+      const body = (await request.json().catch(() => ({}))) || {};
+      const email = normalizeEmail(body.email);
+      if (!isValidEmail(email)) {
+        return json({ error: 'Ingresa un correo válido.' }, 400);
+      }
+      if (!isEmailAllowed(email)) {
+        return json({ error: 'Este correo no está autorizado para ingresar.' }, 403);
+      }
+      const token = signSession(email);
+      const res = json({ ok: true, loggedIn: true, email });
+      res.cookies.set({
+        name: SESSION_COOKIE,
+        value: token,
+        httpOnly: true,
+        sameSite: 'lax',
+        secure: process.env.NODE_ENV === 'production',
+        path: '/',
+        maxAge: SESSION_TTL_SECONDS,
+      });
+      return res;
+    }
+
+    if (pathIs(path, 'auth', 'logout')) {
+      const res = json({ ok: true, loggedIn: false });
+      res.cookies.set({
+        name: SESSION_COOKIE,
+        value: '',
+        path: '/',
+        maxAge: 0,
+      });
+      return res;
+    }
+
+    if (requiresAuth(path) && !sessionEmail) return authRequired();
+
     if (pathIs(path, 'shutdown')) {
       if (!isLocalRequest(request)) {
         return json({ error: 'No permitido.' }, 403);
@@ -421,7 +580,9 @@ export async function POST(request, { params }) {
 
 export async function PUT(request, { params }) {
   const path = asPath(params);
+  const sessionEmail = readSessionEmail(request);
   try {
+    if (requiresAuth(path) && !sessionEmail) return authRequired();
     if (path[0] !== 'eventos' || path.length !== 2) {
       return json({ error: 'Ruta no encontrada' }, 404);
     }
@@ -479,7 +640,19 @@ export async function PUT(request, { params }) {
 
 export async function DELETE(request, { params }) {
   const path = asPath(params);
+  const sessionEmail = readSessionEmail(request);
   try {
+    if (pathIs(path, 'auth', 'logout')) {
+      const res = json({ ok: true, loggedIn: false });
+      res.cookies.set({
+        name: SESSION_COOKIE,
+        value: '',
+        path: '/',
+        maxAge: 0,
+      });
+      return res;
+    }
+    if (requiresAuth(path) && !sessionEmail) return authRequired();
     if (path[0] !== 'eventos' || path.length !== 2) {
       return json({ error: 'Ruta no encontrada' }, 404);
     }

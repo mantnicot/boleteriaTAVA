@@ -16,6 +16,10 @@
         <button type="button" class="header-close-btn" id="btn-cerrar-app" title="Cerrar servidor">
           Cerrar
         </button>
+        <div class="header-session">
+          <span id="auth-user-pill" class="auth-user-pill hidden"></span>
+          <button type="button" id="btn-logout" class="header-logout-btn hidden">Salir</button>
+        </div>
         <h1>
           <a href="#inicio" class="title-link">Sistema de boleteria TAVA teatro</a>
         </h1>
@@ -84,6 +88,23 @@
               >
             </div>
           </div>
+          <div id="intro-lock-msg" class="intro-lock-msg hidden">
+            Inicia sesión para acceder a Eventos, Boletas y Reportes.
+          </div>
+          <section id="intro-login-panel" class="theater-login-panel">
+            <h2>Ingreso al camerino TAVA</h2>
+            <p class="theater-login-copy">
+              Accede con tu correo para habilitar la boletería y el panel administrativo.
+            </p>
+            <form id="login-form" class="theater-login-form">
+              <label for="login-email">Correo de acceso</label>
+              <input type="email" id="login-email" placeholder="tu-correo@dominio.com" required />
+              <button type="submit" class="btn btn-lg">Entrar al escenario</button>
+            </form>
+            <p class="theater-login-note">
+              Si tu correo no está autorizado, solicita acceso al administrador.
+            </p>
+          </section>
         </section>
 
         <section id="view-eventos" data-view="eventos" hidden>

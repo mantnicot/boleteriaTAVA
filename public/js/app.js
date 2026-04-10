@@ -32,6 +32,7 @@
 
   let cacheEventos = [];
   let selectedBoletaEvent = null;
+  const authState = { loggedIn: false, email: '' };
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -133,9 +134,31 @@
     });
   }
 
+  function applyAuthUi() {
+    const nav = document.querySelector('.main-nav');
+    const lockMsg = $('#intro-lock-msg');
+    const loginPanel = $('#intro-login-panel');
+    const userPill = $('#auth-user-pill');
+    const logoutBtn = $('#btn-logout');
+
+    const logged = !!authState.loggedIn;
+    if (nav) nav.classList.toggle('hidden', !logged);
+    if (lockMsg) lockMsg.classList.toggle('hidden', logged);
+    if (loginPanel) loginPanel.classList.toggle('hidden', logged);
+    if (userPill) {
+      userPill.textContent = logged ? authState.email : '';
+      userPill.classList.toggle('hidden', !logged);
+    }
+    if (logoutBtn) logoutBtn.classList.toggle('hidden', !logged);
+  }
+
   function route() {
     let h = (location.hash || '#inicio').replace(/^#/, '') || 'inicio';
     if (!['inicio', 'eventos', 'boletas', 'reportes'].includes(h)) h = 'inicio';
+    if (!authState.loggedIn && h !== 'inicio') {
+      h = 'inicio';
+      if (location.hash !== '#inicio') location.hash = '#inicio';
+    }
 
     const shell = document.querySelector('.app-shell');
     if (shell) {
@@ -151,8 +174,8 @@
     setSubBars(h === 'inicio' ? '' : h);
     setNavActive(h === 'inicio' ? '' : h);
 
-    if (h === 'boletas') refreshBoletaEventosSelect();
-    if (h === 'reportes') refreshReportes();
+    if (authState.loggedIn && h === 'boletas') refreshBoletaEventosSelect();
+    if (authState.loggedIn && h === 'reportes') refreshReportes();
   }
 
   function renderFechasTable(tbodyId, list, onDel) {
@@ -240,6 +263,13 @@
     const ct = r.headers.get('content-type') || '';
     const data = ct.includes('json') ? await r.json() : await r.text();
     if (!r.ok) {
+      if (r.status === 401 && typeof data === 'object' && data.code === 'AUTH_REQUIRED') {
+        authState.loggedIn = false;
+        authState.email = '';
+        applyAuthUi();
+        route();
+        throw new Error('Debes iniciar sesión con correo para continuar.');
+      }
       if (r.status === 401 && typeof data === 'object' && data.code === 'OAUTH_REQUIRED') {
         window.location.href = data.authUrl || '/auth/google';
         throw new Error('Redirigiendo a Google…');
@@ -253,6 +283,13 @@
   /** Respuestas JSON de fetch manual (FormData, etc.): redirige si falta OAuth. */
   async function fetchOAuthJson(res) {
     const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && data.code === 'AUTH_REQUIRED') {
+      authState.loggedIn = false;
+      authState.email = '';
+      applyAuthUi();
+      route();
+      throw new Error('Debes iniciar sesión con correo para continuar.');
+    }
     if (res.status === 401 && data.code === 'OAUTH_REQUIRED') {
       window.location.href = data.authUrl || '/auth/google';
       throw new Error('Redirigiendo a Google…');
@@ -775,19 +812,73 @@
     }
 
     try {
-      const s = await withTheaterLoading(() => api('/api/setup'));
-      if (s.needsOAuth && !sessionStorage.getItem('tava-oauth-asked')) {
-        sessionStorage.setItem('tava-oauth-asked', '1');
-        const ok = await showConfirm(
-          'Conectar tu Gmail',
-          'La primera vez debes iniciar sesión con tu cuenta Google personal para usar la hoja de cálculo y la carpeta de Drive.\n\n¿Abrir ahora la página de Google? (También puedes ir a /auth/google cuando quieras.)'
-        );
-        if (ok) window.location.href = s.authUrl || '/auth/google';
+      const me = await api('/api/auth/me');
+      authState.loggedIn = !!me.loggedIn;
+      authState.email = me.email || '';
+    } catch (_) {
+      authState.loggedIn = false;
+      authState.email = '';
+    }
+    applyAuthUi();
+
+    try {
+      if (authState.loggedIn) {
+        const s = await withTheaterLoading(() => api('/api/setup'));
+        if (s.needsOAuth && !sessionStorage.getItem('tava-oauth-asked')) {
+          sessionStorage.setItem('tava-oauth-asked', '1');
+          const ok = await showConfirm(
+            'Conectar tu Gmail',
+            'La primera vez debes iniciar sesión con tu cuenta Google personal para usar la hoja de cálculo y la carpeta de Drive.\n\n¿Abrir ahora la página de Google? (También puedes ir a /auth/google cuando quieras.)'
+          );
+          if (ok) window.location.href = s.authUrl || '/auth/google';
+        }
       }
     } catch (_) {}
     if (!location.hash) location.hash = '#inicio';
     route();
     resetEvForm();
+
+    const loginForm = $('#login-form');
+    if (loginForm) {
+      loginForm.addEventListener('submit', async (evn) => {
+        evn.preventDefault();
+        const email = ($('#login-email')?.value || '').trim().toLowerCase();
+        if (!email) {
+          await showAlert('Correo requerido', 'Ingresa un correo para iniciar sesión.');
+          return;
+        }
+        try {
+          const out = await withTheaterLoading(() =>
+            api('/api/auth/login', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ email }),
+            })
+          );
+          authState.loggedIn = !!out.loggedIn;
+          authState.email = out.email || email;
+          applyAuthUi();
+          location.hash = '#eventos';
+          route();
+        } catch (e) {
+          await showAlert('No fue posible ingresar', e.message || String(e));
+        }
+      });
+    }
+
+    const logoutBtn = $('#btn-logout');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try {
+          await api('/api/auth/logout', { method: 'POST' });
+        } catch (_) {}
+        authState.loggedIn = false;
+        authState.email = '';
+        applyAuthUi();
+        location.hash = '#inicio';
+        route();
+      });
+    }
 
     const btnCerrar = $('#btn-cerrar-app');
     if (btnCerrar) {
