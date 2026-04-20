@@ -24,8 +24,8 @@ async function blurFondoBuffer(buf, widthPt, heightPt) {
     const outH = Math.max(2, Math.round(outW * ratio));
     return await sharp(buf)
       .rotate()
-      .resize(32, Math.max(2, Math.round(32 * ratio)), { fit: 'cover', position: 'centre' })
-      .blur(10)
+      .resize(56, Math.max(2, Math.round(56 * ratio)), { fit: 'cover', position: 'centre' })
+      .blur(6)
       .resize(outW, outH, { fit: 'cover', position: 'centre' })
       .jpeg({ quality: 85, mozjpeg: true })
       .toBuffer();
@@ -97,61 +97,14 @@ function drawWrappedRight(
   return y;
 }
 
-/** Bandas rojas al ras del borde + texto blanco en negrita (HelveticaBold). */
-function drawBannerLeft(page, fontBold, text, size, xText, yBaseline, L, white, bandFill, bandAccent) {
-  const tw = fontBold.widthOfTextAtSize(text, size);
-  const h = size + 18;
-  const y0 = yBaseline - 7;
-  const x0 = 4;
-  const w = Math.min(L - 8, xText + tw + 22 - x0);
-  page.drawRectangle({ x: x0, y: y0, width: w, height: h, color: bandFill });
-  page.drawRectangle({ x: x0, y: y0, width: 7, height: h, color: bandAccent });
-  page.drawText(text, { x: xText, y: yBaseline, size, font: fontBold, color: white });
-}
-
-function drawBannerCenter(page, fontBold, text, size, yBaseline, L, white, bandFill) {
-  const tw = fontBold.widthOfTextAtSize(text, size);
-  const h = size + 18;
-  const y0 = yBaseline - 7;
-  const pad = 26;
-  const w = tw + pad * 2;
-  const x0 = (L - w) / 2;
-  page.drawRectangle({ x: x0, y: y0, width: w, height: h, color: bandFill });
-  page.drawText(text, { x: (L - tw) / 2, y: yBaseline, size, font: fontBold, color: white });
-}
-
-function drawBannerRightLine(page, fontBold, text, size, xRight, yBaseline, L, white, bandFill, bandAccent) {
-  const tw = fontBold.widthOfTextAtSize(text, size);
-  const xText = xRight - tw;
-  const h = size + 16;
-  const y0 = yBaseline - 6;
-  const x0 = Math.max(10, xText - 22);
-  const w = L - 8 - x0;
-  page.drawRectangle({ x: x0, y: y0, width: w, height: h, color: bandFill });
-  page.drawRectangle({ x: x0 + w - 7, y: y0, width: 7, height: h, color: bandAccent });
-  page.drawText(text, { x: xText, y: yBaseline, size, font: fontBold, color: white });
-}
-
-function drawWrappedRightBanners(
-  page,
-  text,
-  xRight,
-  yTopBaseline,
-  maxW,
-  size,
-  fontBold,
-  L,
-  white,
-  bandFill,
-  bandAccent,
-  lineGap = 6
-) {
-  const lines = wrapLines(text, maxW, size, fontBold);
-  let y = yTopBaseline;
-  const step = size + 26 + lineGap;
+/** Texto centrado en columna (boleta artística). */
+function drawCenteredLines(page, fontBold, text, size, cx, yTop, maxW, white, lineGap = 8) {
+  const lines = wrapLines(String(text), maxW, size, fontBold);
+  let y = yTop;
   for (const ln of lines) {
-    drawBannerRightLine(page, fontBold, ln, size, xRight, y, L, white, bandFill, bandAccent);
-    y -= step;
+    const tw = fontBold.widthOfTextAtSize(ln, size);
+    page.drawText(ln, { x: cx - tw / 2, y, size, font: fontBold, color: white });
+    y -= size + lineGap;
   }
   return y;
 }
@@ -219,13 +172,10 @@ async function buildBoletaPdf({
 
   const splitX = W * FRACCION_IMAGEN_DATOS;
   const L = splitX;
-  const pad = 20;
 
   /** Alineado con tema web: --burgundy-dark #5c0c1e, --burgundy #7a1027 */
   const themeDark = rgb(92 / 255, 12 / 255, 30 / 255);
   const themeBurgundy = rgb(122 / 255, 16 / 255, 39 / 255);
-  const bandFill = rgb(58 / 255, 6 / 255, 18 / 255);
-  const bandAccent = rgb(100 / 255, 14 / 255, 32 / 255);
   const white = rgb(1, 1, 1);
 
   const processedFondo = await blurFondoBuffer(fondoBuffer, L, H);
@@ -251,9 +201,6 @@ async function buildBoletaPdf({
     logoDrawW = Math.min(76, logoImg.width);
     logoDrawH = logoDrawW * ar;
   }
-
-  const logoX = L - pad - logoDrawW;
-  const logoY = pad;
 
   const termsPad = 26;
   const termsInnerW = W - splitX - termsPad * 2;
@@ -347,7 +294,7 @@ async function buildBoletaPdf({
         width: L,
         height: H,
         color: themeDark,
-        opacity: 0.7,
+        opacity: 0.4,
       });
     } else {
       page.drawRectangle({
@@ -368,108 +315,87 @@ async function buildBoletaPdf({
     });
   }
 
-  const bodySize = 17;
-  const fechaSz = 18;
-  const horaSz = 16;
-  const dirSz = 15;
-  const codigoSz = 16;
-
-  const fechaStr = `Fecha : ${String(fecha || '—').trim()}`;
-  const fechaY = H - pad - fechaSz;
-  drawBannerCenter(page, fontBold, fechaStr, fechaSz, fechaY, L, white, bandFill);
-
-  const yMid = H * 0.58;
-  let yLeft = yMid;
-  const nombreStr = `Nombre : ${String(nombre || '—').trim().slice(0, 72)}`;
-  drawBannerLeft(page, fontBold, nombreStr, bodySize, pad, yLeft, L, white, bandFill, bandAccent);
-  yLeft -= bodySize + 38;
-  const cantStr = `Cantidad : ${String(cantidad ?? '—')}`;
-  drawBannerLeft(page, fontBold, cantStr, bodySize, pad, yLeft, L, white, bandFill, bandAccent);
-
-  const textRightEdge = logoImg ? logoX - 14 : L - pad;
-  const blockMaxW = Math.max(140, textRightEdge - pad - 8);
+  const cx = L / 2;
+  const cardW = Math.min(400, L - 28);
+  const innerW = cardW - 48;
+  const cardPanel = rgb(36 / 255, 5 / 255, 12 / 255);
+  const goldLine = rgb(0.9, 0.78, 0.62);
 
   const titulo = String(nombreProyecto || 'EVENTO').trim() || 'EVENTO';
+  const fechaStr = `Fecha : ${String(fecha || '—').trim()}`;
+  const nombreStr = `Nombre : ${String(nombre || '—').trim().slice(0, 72)}`;
+  const cantStr = `Cantidad : ${String(cantidad ?? '—')}`;
   const horaStr = `Hora del evento : ${String(hora || '—').trim()}`;
   const dirStr = `Dirección : ${String(direccion || '—').trim()}`;
-  const dirLines = wrapLines(dirStr, blockMaxW, dirSz, fontBold);
-
-  const stackBottom = logoY + logoDrawH + 52;
-  const lineGapTitle = 6;
-  const lineGapAddr = 6;
-  const gapBeforeHora = 14;
-  const gapAfterHora = 14;
-  const dirStep = dirSz + 26 + lineGapAddr;
-
-  let titleSize = 28;
-  const minTitle = 16;
-  while (titleSize >= minTitle) {
-    const titleLines = wrapLines(titulo.slice(0, 200), blockMaxW, titleSize, fontBold);
-    const nTit = titleLines.length;
-    const addrSpan = dirLines.length > 0 ? (dirLines.length - 1) * dirStep : 0;
-    const yTopAddr = stackBottom + addrSpan;
-    const yHora = yTopAddr + dirSz + gapAfterHora;
-    const yLowTitle = yHora + horaSz + gapBeforeHora;
-    const titleBlockH = nTit > 0 ? (nTit - 1) * (titleSize + 26 + lineGapTitle) + titleSize : titleSize;
-    const yTopTitle = yLowTitle + titleBlockH - titleSize;
-    if (yTopTitle <= H - pad - 8 && yTopTitle > yLeft - 24) break;
-    titleSize -= 1;
-  }
-
-  const titleLines = wrapLines(titulo.slice(0, 200), blockMaxW, titleSize, fontBold);
-  const nTit = titleLines.length;
-  const addrSpan = dirLines.length > 0 ? (dirLines.length - 1) * dirStep : 0;
-  const yTopAddr = stackBottom + addrSpan;
-  const yHora = yTopAddr + dirSz + gapAfterHora;
-  const yLowTitle = yHora + horaSz + gapBeforeHora;
-  let yTopTitle = nTit > 0 ? yLowTitle + (nTit - 1) * (titleSize + 26 + lineGapTitle) : yLowTitle;
-
-  if (yTopTitle > H - pad - 8) {
-    yTopTitle = H - pad - 8;
-  }
-
-  drawWrappedRightBanners(
-    page,
-    titulo.slice(0, 200),
-    textRightEdge,
-    yTopTitle,
-    blockMaxW,
-    titleSize,
-    fontBold,
-    L,
-    white,
-    bandFill,
-    bandAccent,
-    lineGapTitle
-  );
-
-  drawBannerRightLine(page, fontBold, horaStr, horaSz, textRightEdge, yHora, L, white, bandFill, bandAccent);
-
-  for (let i = 0; i < dirLines.length; i++) {
-    const ln = dirLines[i];
-    const yLn = yTopAddr - i * dirStep;
-    drawBannerRightLine(page, fontBold, ln, dirSz, textRightEdge, yLn, L, white, bandFill, bandAccent);
-  }
-
   const codigoStr = `Código boleta : ${String(codigoBoleta || '—').trim()}`;
-  drawBannerLeft(page, fontBold, codigoStr, codigoSz, pad, stackBottom, L, white, bandFill, bandAccent);
 
+  const fechaSz = 17;
+  const titleSzStart = 23;
+  const bodySz = 15;
+  const horaSz = 14;
+  const dirSz = 13;
+  const codigoSz = 15;
+
+  let titleSz = titleSzStart;
+  const minTitle = 12;
+  while (titleSz >= minTitle) {
+    const titleH =
+      wrapLines(titulo.slice(0, 200), innerW, titleSz, fontBold).length * (titleSz + 8);
+    if (titleH <= H * 0.26) break;
+    titleSz -= 1;
+  }
+
+  const innerStackH = () => {
+    let h = 28;
+    h += logoImg ? logoDrawH + 14 : 0;
+    h += fechaSz + 10;
+    h += wrapLines(titulo.slice(0, 200), innerW, titleSz, fontBold).length * (titleSz + 8) + 18;
+    h += (bodySz + 10) * 2 + 12;
+    h += horaSz + 10;
+    h += wrapLines(dirStr, innerW, dirSz, fontBold).length * (dirSz + 7) + 14;
+    h += codigoSz + 22;
+    return h;
+  };
+
+  const cardH = Math.min(H - 20, Math.max(innerStackH(), H * 0.56));
+  const cardBottomY = (H - cardH) / 2;
+  const xCard = (L - cardW) / 2;
+
+  page.drawRectangle({
+    x: xCard,
+    y: cardBottomY,
+    width: cardW,
+    height: cardH,
+    color: cardPanel,
+    borderColor: goldLine,
+    borderWidth: 1,
+  });
+
+  let y = cardBottomY + cardH - 24;
   if (logoImg) {
-    page.drawRectangle({
-      x: logoX - 3,
-      y: logoY - 3,
-      width: logoDrawW + 6,
-      height: logoDrawH + 6,
-      color: rgb(1, 1, 1),
-      opacity: 0.92,
-    });
+    const lx = cx - logoDrawW / 2;
+    y -= logoDrawH;
     page.drawImage(logoImg, {
-      x: logoX,
-      y: logoY,
+      x: lx,
+      y,
       width: logoDrawW,
       height: logoDrawH,
     });
+    y -= 12;
   }
+  y = drawCenteredLines(page, fontBold, fechaStr, fechaSz, cx, y, innerW, white, 9);
+  y -= 8;
+  y = drawCenteredLines(page, fontBold, titulo.slice(0, 200), titleSz, cx, y, innerW, white, 9);
+  y -= 10;
+  y = drawCenteredLines(page, fontBold, nombreStr, bodySz, cx, y, innerW, white, 9);
+  y -= 6;
+  y = drawCenteredLines(page, fontBold, cantStr, bodySz, cx, y, innerW, white, 9);
+  y -= 10;
+  y = drawCenteredLines(page, fontBold, horaStr, horaSz, cx, y, innerW, white, 8);
+  y -= 8;
+  y = drawCenteredLines(page, fontBold, dirStr, dirSz, cx, y, innerW, white, 7);
+  y -= 12;
+  drawCenteredLines(page, fontBold, codigoStr, codigoSz, cx, y, innerW, white, 8);
 
   return pdfDoc.save();
 }

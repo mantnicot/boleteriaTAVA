@@ -423,6 +423,8 @@ export async function POST(request, { params }) {
       if (!allowedEmails.isAllowedEmail(email)) {
         return json({ error: 'Este correo no está autorizado para ingresar.' }, 403);
       }
+      /** Cada ingreso con correo invalida tokens Google previos (un solo archivo de tokens en el servidor). */
+      googleAuth.clearOAuthTokens();
       const token = signSession(email);
       const res = json({ ok: true, loggedIn: true, email });
       res.cookies.set({
@@ -448,6 +450,7 @@ export async function POST(request, { params }) {
     }
 
     if (pathIs(path, 'auth', 'logout')) {
+      googleAuth.clearOAuthTokens();
       const res = json({ ok: true, loggedIn: false });
       res.cookies.set({
         name: SESSION_COOKIE,
@@ -698,6 +701,7 @@ export async function DELETE(request, { params }) {
   const sessionEmail = readSessionEmail(request);
   try {
     if (pathIs(path, 'auth', 'logout')) {
+      googleAuth.clearOAuthTokens();
       const res = json({ ok: true, loggedIn: false });
       res.cookies.set({
         name: SESSION_COOKIE,

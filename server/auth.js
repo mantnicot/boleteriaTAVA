@@ -82,6 +82,15 @@ function saveTokens(tokens) {
   } catch (_) {}
 }
 
+/** Al cerrar sesión de la app: la próxima vez hay que volver a vincular Google (tokens locales). */
+function clearOAuthTokens() {
+  memoryTokens = null;
+  if (process.env.GOOGLE_OAUTH_TOKENS_JSON) return;
+  try {
+    if (fs.existsSync(TOKEN_FILE)) fs.unlinkSync(TOKEN_FILE);
+  } catch (_) {}
+}
+
 /**
  * URL para abrir en el navegador y vincular tu cuenta de Gmail (solo la primera vez o si revocas acceso).
  */
@@ -118,7 +127,7 @@ async function getOAuth2ClientReady() {
   const tokens = loadTokens();
   if (!tokens || (!tokens.refresh_token && !tokens.access_token)) {
     const err = new Error(
-      'Cuenta de Google no vinculada. Visita /auth/google en el mismo equipo donde corre el servidor.'
+      'Cuenta de Google no vinculada. Usa «Conectar cuenta Google» en la pantalla de ingreso (mismo equipo donde corre el servidor).'
     );
     err.code = 'OAUTH_REQUIRED';
     throw err;
@@ -167,5 +176,6 @@ module.exports = {
   getAuth,
   hasOAuthTokens,
   getRedirectUri,
+  clearOAuthTokens,
   SCOPES,
 };

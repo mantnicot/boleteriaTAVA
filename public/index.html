@@ -21,6 +21,11 @@
         <p class="theater-login-note">
           Si tu correo no está autorizado, solicita acceso al administrador.
         </p>
+        <p class="auth-google-hint">
+          Tras validar tu correo, el sistema te pedirá vincular Google antes de abrir el telón (también si cambias
+          de usuario o cierras sesión en este equipo).
+        </p>
+        <a href="/auth/google" class="btn auth-google-btn">Conectar cuenta Google</a>
       </div>
     </div>
     <div class="bg-blur-layer" aria-hidden="true"></div>
@@ -34,9 +39,6 @@
     </div>
     <div class="app-shell">
       <header class="site-header">
-        <button type="button" class="header-close-btn" id="btn-cerrar-app" title="Cerrar servidor">
-          Cerrar
-        </button>
         <div class="header-session">
           <span id="auth-user-pill" class="auth-user-pill hidden"></span>
           <button type="button" id="btn-logout" class="header-logout-btn hidden">Salir</button>
@@ -430,10 +432,6 @@
             <span class="footer-tel-num">+57 300 326 8095</span>
           </a>
         </div>
-        <p class="footer-oauth-wrap">
-          <a href="/auth/google" class="footer-oauth">Conectar cuenta Google</a>
-          <span class="footer-oauth-hint"> (primera vez o si caduca el acceso)</span>
-        </p>
       </footer>
     </div>
 

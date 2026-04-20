@@ -34,6 +34,7 @@
   let selectedBoletaEvent = null;
   const authState = { loggedIn: false, email: '' };
   const curtainState = { playing: false };
+  const CURTAIN_ANIM_MS = 9200;
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -155,6 +156,12 @@
     }
     if (logoutBtn) logoutBtn.classList.toggle('hidden', !logged);
     if (allowedPanel) allowedPanel.classList.toggle('hidden', !logged);
+
+    const curtain = $('#curtain-overlay');
+    if (curtain && !logged) {
+      curtain.classList.remove('hidden');
+      curtain.classList.remove('opening');
+    }
   }
 
   function playCurtainIntro() {
@@ -169,7 +176,7 @@
       overlay.classList.add('hidden');
       overlay.classList.remove('opening');
       curtainState.playing = false;
-    }, 1850);
+    }, CURTAIN_ANIM_MS);
   }
 
   function pulseActionTarget(el) {
@@ -348,7 +355,7 @@
       if (r.status === 401 && typeof data === 'object' && data.code === 'OAUTH_REQUIRED') {
         const err = new Error(
           (data.error || 'Debes reconectar Google para continuar.') +
-            '\n\nUsa el enlace "Conectar cuenta Google" en el pie de página y vuelve.'
+            '\n\nUsa el enlace «Conectar cuenta Google» en la pantalla de ingreso y vuelve a intentar.'
         );
         err.code = 'OAUTH_REQUIRED';
         err.authUrl = data.authUrl || '/auth/google';
@@ -373,7 +380,7 @@
     if (res.status === 401 && data.code === 'OAUTH_REQUIRED') {
       const err = new Error(
         (data.error || 'Debes reconectar Google para continuar.') +
-          '\n\nUsa el enlace "Conectar cuenta Google" en el pie de página y vuelve.'
+          '\n\nUsa el enlace «Conectar cuenta Google» en la pantalla de ingreso y vuelve a intentar.'
       );
       err.code = 'OAUTH_REQUIRED';
       err.authUrl = data.authUrl || '/auth/google';
@@ -951,21 +958,21 @@
       authState.email = '';
     }
     applyAuthUi();
-    if (authState.loggedIn && !sessionStorage.getItem('tava-curtain-opened')) {
-      sessionStorage.setItem('tava-curtain-opened', '1');
-      playCurtainIntro();
-    }
 
     try {
       if (authState.loggedIn) {
         const s = await withTheaterLoading(() => api('/api/setup'));
-        if (s.needsOAuth && !sessionStorage.getItem('tava-oauth-asked')) {
-          sessionStorage.setItem('tava-oauth-asked', '1');
-          const ok = await showConfirm(
-            'Conectar tu Gmail',
-            'La primera vez debes iniciar sesión con tu cuenta Google personal para usar la hoja de cálculo y la carpeta de Drive.\n\n¿Abrir ahora la página de Google? (También puedes ir a /auth/google cuando quieras.)'
+        if (s.needsOAuth) {
+          await showAlert(
+            'Conectar Google',
+            'Para usar el sistema debes vincular tu cuenta Google en este equipo. Se abrirá la página de autorización.'
           );
-          if (ok) window.location.href = s.authUrl || '/auth/google';
+          window.location.href = s.authUrl || '/auth/google';
+          return;
+        }
+        if (!sessionStorage.getItem('tava-curtain-opened')) {
+          sessionStorage.setItem('tava-curtain-opened', '1');
+          playCurtainIntro();
         }
       }
     } catch (_) {}
@@ -993,6 +1000,15 @@
           authState.loggedIn = !!out.loggedIn;
           authState.email = out.email || email;
           applyAuthUi();
+          const s = await withTheaterLoading(() => api('/api/setup'));
+          if (s.needsOAuth) {
+            await showAlert(
+              'Conectar Google',
+              'Para usar el sistema debes vincular tu cuenta Google. Se abrirá la página de autorización.'
+            );
+            window.location.href = s.authUrl || '/auth/google';
+            return;
+          }
           sessionStorage.setItem('tava-curtain-opened', '1');
           playCurtainIntro();
           await loadAllowedEmails().catch(() => {});
@@ -1043,26 +1059,6 @@
 
     if (authState.loggedIn) {
       await loadAllowedEmails().catch(() => {});
-    }
-
-    const btnCerrar = $('#btn-cerrar-app');
-    if (btnCerrar) {
-      btnCerrar.addEventListener('click', async () => {
-        const ok = await showConfirm(
-          'Cerrar sistema',
-          'Se detendrá el servidor en este equipo. La página dejará de responder; puede cerrar el navegador después.'
-        );
-        if (!ok) return;
-        try {
-          await fetch('/api/shutdown', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: '{}',
-          });
-        } catch (_) {
-          /* El servidor ya se cerró o no hay conexión */
-        }
-      });
     }
 
     const IDLE_LIMIT_MS = 5 * 60 * 1000;
