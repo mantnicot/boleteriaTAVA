@@ -41,19 +41,14 @@ async function blurFondoBuffer(buf, widthPt, heightPt) {
   }
 }
 
-/** Logo boleta: PNG corporativo en `public/assets/logo-tava-boleta.png`; si no existe, convierte el SVG legacy. */
+/** Logo boleta: bytes PNG/JPEG sin alterar (pdf-lib); fallback SVG vía sharp. */
 async function loadBoletaLogoPng() {
   const pngPath = path.join(__dirname, '..', 'public', 'assets', 'logo-tava-boleta.png');
   if (fs.existsSync(pngPath)) {
     try {
-      const sharp = require('sharp');
-      return await sharp(pngPath).png().resize({ width: 220, height: 220, fit: 'inside' }).toBuffer();
+      return fs.readFileSync(pngPath);
     } catch {
-      try {
-        return fs.readFileSync(pngPath);
-      } catch {
-        /* sigue al fallback */
-      }
+      /* sigue */
     }
   }
   const svgPath = path.join(__dirname, '..', 'public', 'assets', 'logo-tava.svg');
@@ -61,6 +56,30 @@ async function loadBoletaLogoPng() {
   try {
     const sharp = require('sharp');
     return await sharp(svgPath).png().resize({ width: 88, height: 104, fit: 'inside' }).toBuffer();
+  } catch {
+    return null;
+  }
+}
+
+async function embedLogoForPdf(pdfDoc, buf) {
+  if (!buf || !buf.length) return null;
+  try {
+    return await pdfDoc.embedPng(buf);
+  } catch {
+    try {
+      return await pdfDoc.embedJpg(buf);
+    } catch {
+      /* intenta RGB opaco por transparencia / perfil raro */
+    }
+  }
+  try {
+    const sharp = require('sharp');
+    const normalized = await sharp(buf)
+      .resize({ width: 256, height: 256, fit: 'inside' })
+      .png({ compressionLevel: 6 })
+      .flatten({ background: { r: 255, g: 255, b: 255 } })
+      .toBuffer();
+    return await pdfDoc.embedPng(normalized);
   } catch {
     return null;
   }
@@ -136,7 +155,7 @@ async function embedFondoImage(pdfDoc, buf) {
   }
 }
 
-function pickTermsFontSize(terms, maxW, font, yTop, bottomMin, maxSize = 9.5, minSize = 4.5) {
+function pickTermsFontSize(terms, maxW, font, yTop, bottomMin, maxSize = 10.2, minSize = 4.5) {
   const usable = yTop - bottomMin;
   let best = minSize;
   for (let s = maxSize; s >= minSize; s -= 0.45) {
@@ -150,23 +169,52 @@ function pickTermsFontSize(terms, maxW, font, yTop, bottomMin, maxSize = 9.5, mi
   return best;
 }
 
-function drawTermsOnPage(page, lines, startLine, termsX, yTop, size, font, color, bottomMin) {
-  let ly = yTop;
-  let i = startLine;
-  const lineStep = size + 3.15;
-  while (i < lines.length && ly >= bottomMin) {
-    const ln = lines[i];
-    page.drawText(ln.length > 500 ? `${ln.slice(0, 497)}…` : ln, {
-      x: termsX,
-      y: ly,
-      size,
-      font,
-      color,
-    });
-    ly -= lineStep;
-    i += 1;
+/**
+ * Dibuja un bloque de líneas de términos centrado y repartiendo el espacio vertical entre yBottom e yTop.
+ * Devuelve el índice de la siguiente línea por dibujar.
+ */
+function drawTermsCenteredSpread(page, lines, startIdx, yTop, yBottom, cx, edgeL, edgeR, size, font, color) {
+  if (startIdx >= lines.length) return startIdx;
+  let available = yTop - yBottom;
+  if (available <= size + 4) {
+    const raw = lines[startIdx];
+    const ln = raw.length > 500 ? `${raw.slice(0, 497)}…` : raw;
+    const tw = font.widthOfTextAtSize(ln, size);
+    let x = cx - tw / 2;
+    if (x < edgeL) x = edgeL;
+    if (x + tw > edgeR) x = edgeR - tw;
+    page.drawText(ln, { x, y: yBottom + size * 0.72, size, font, color });
+    return startIdx + 1;
   }
-  return i;
+  let n = 0;
+  let acc = 0;
+  const minG = 3.2;
+  for (let i = startIdx; i < lines.length; i++) {
+    const add = n === 0 ? size : minG + size;
+    if (acc + add > available + 0.5) break;
+    acc += add;
+    n++;
+  }
+  if (n < 1) n = 1;
+  let gap = minG;
+  let blockH = n * size + (n - 1) * gap;
+  if (n > 1 && blockH < available) {
+    gap = minG + (available - blockH) / (n - 1);
+    blockH = n * size + (n - 1) * gap;
+  }
+  const yBlockBottom = yBottom + Math.max(0, (available - blockH) / 2);
+  let y = yBlockBottom + blockH - size * 0.72;
+  for (let k = 0; k < n; k++) {
+    const raw = lines[startIdx + k];
+    const ln = raw.length > 500 ? `${raw.slice(0, 497)}…` : raw;
+    const tw = font.widthOfTextAtSize(ln, size);
+    let x = cx - tw / 2;
+    if (x < edgeL) x = edgeL;
+    if (x + tw > edgeR) x = edgeR - tw;
+    page.drawText(ln, { x, y, size, font, color });
+    y -= size + gap;
+  }
+  return startIdx + n;
 }
 
 async function buildBoletaPdf({
@@ -199,14 +247,7 @@ async function buildBoletaPdf({
   }
 
   const logoPng = await loadBoletaLogoPng();
-  let logoImg = null;
-  if (logoPng && logoPng.length) {
-    try {
-      logoImg = await pdfDoc.embedPng(logoPng);
-    } catch {
-      logoImg = null;
-    }
-  }
+  const logoImg = await embedLogoForPdf(pdfDoc, logoPng);
 
   let logoDrawW = 0;
   let logoDrawH = 0;
@@ -224,10 +265,9 @@ async function buildBoletaPdf({
 
   const termsPad = 26;
   const termsInnerW = W - splitX - termsPad * 2;
-  const termsX = splitX + termsPad;
   const termsHeaderY = H - termsPad - 14;
-  const termsBodyTop = termsHeaderY - 26;
-  const termsBottomMin = 38;
+  const termsBodyTop = termsHeaderY - 22;
+  const termsBottomMin = 32;
 
   const terms = (terminos || 'Términos no especificados.').trim();
   const termsFontSize = pickTermsFontSize(terms, termsInnerW, font, termsBodyTop, termsBottomMin);
@@ -246,59 +286,65 @@ async function buildBoletaPdf({
     });
   }
 
-  function drawTermsHeader(p, headerText) {
+  function drawTermsHeaderCentered(p, headerText, size, split) {
+    const tw = fontBold.widthOfTextAtSize(headerText, size);
+    const cx = split + (W - split) / 2;
     p.drawText(headerText, {
-      x: termsX,
+      x: cx - tw / 2,
       y: termsHeaderY,
-      size: 14,
+      size,
       font: fontBold,
       color: white,
     });
   }
 
   drawRightPanelMaroon(page);
-  drawTermsHeader(page, 'Términos y condiciones');
+  drawTermsHeaderCentered(page, 'Términos y condiciones', 14, splitX);
 
-  lineIdx = drawTermsOnPage(
+  const termsCx = splitX + (W - splitX) / 2;
+  const termsEdgeL = splitX + 14;
+  const termsEdgeR = W - 14;
+  lineIdx = drawTermsCenteredSpread(
     page,
     termLineList,
     lineIdx,
-    termsX,
     termsBodyTop,
+    termsBottomMin,
+    termsCx,
+    termsEdgeL,
+    termsEdgeR,
     termsFontSize,
     font,
-    white,
-    termsBottomMin
+    white
   );
 
-  let contLines =
-    lineIdx < termLineList.length
-      ? termLines(termLineList.slice(lineIdx).join(' '), W - termsPad * 2, termsFontSize, font)
-      : [];
-  let contIdx = 0;
-
-  while (contIdx < contLines.length) {
+  let termsPageGuard = 0;
+  while (lineIdx < termLineList.length && termsPageGuard++ < 50) {
     page = pdfDoc.addPage([W, H]);
     page.drawRectangle({ x: 0, y: 0, width: W, height: H, color: themeBurgundy });
     const contHeaderY = H - termsPad - 14;
-    page.drawText('Términos y condiciones (continuación)', {
-      x: termsPad,
+    const contBodyTop = contHeaderY - 24;
+    const contTitle = 'Términos y condiciones (continuación)';
+    const ctw = fontBold.widthOfTextAtSize(contTitle, 12);
+    page.drawText(contTitle, {
+      x: W / 2 - ctw / 2,
       y: contHeaderY,
       size: 12,
       font: fontBold,
       color: white,
     });
-    const contBodyTop = contHeaderY - 22;
-    contIdx = drawTermsOnPage(
+    lineIdx = drawTermsCenteredSpread(
       page,
-      contLines,
-      contIdx,
-      termsPad,
+      termLineList,
+      lineIdx,
       contBodyTop,
+      termsBottomMin,
+      W / 2,
+      termsPad,
+      W - termsPad,
       termsFontSize,
       font,
-      white,
-      termsBottomMin
+      white
     );
   }
 
@@ -335,11 +381,9 @@ async function buildBoletaPdf({
     });
   }
 
-  /** Panel inferior claro (toda la anchura de la mitad boleta). */
-  const cream = rgb(0.99, 0.975, 0.945);
-  const creamShadow = rgb(0.88, 0.82, 0.76);
-  const goldLine = rgb(0.78, 0.58, 0.22);
-  const goldBright = rgb(0.95, 0.82, 0.42);
+  /** Panel inferior: crema suave semitransparente (sin amarillos) y borde borgoña discreto. */
+  const cream = rgb(0.98, 0.965, 0.94);
+  const creamBorder = rgb(58 / 255, 14 / 255, 22 / 255);
   const inkTitle = rgb(62 / 255, 8 / 255, 22 / 255);
   const inkBody = rgb(28 / 255, 10 / 255, 14 / 255);
   const inkAccent = rgb(110 / 255, 18 / 255, 36 / 255);
@@ -400,23 +444,22 @@ async function buildBoletaPdf({
     width: L,
     height: bandH,
     color: cream,
-    borderColor: goldLine,
-    borderWidth: 2.5,
+    opacity: 0.86,
+    borderColor: creamBorder,
+    borderWidth: 1.1,
   });
-  page.drawRectangle({
-    x: 0,
-    y: bandTop - 6,
-    width: L,
-    height: 6,
-    color: goldBright,
-  });
-  page.drawRectangle({
-    x: 10,
-    y: bandTop - 8,
-    width: L - 20,
-    height: 2,
-    color: creamShadow,
-  });
+  for (let s = 0; s < 9; s++) {
+    const h = 4;
+    const y0 = bandTop - (s + 1) * h;
+    page.drawRectangle({
+      x: 0,
+      y: y0,
+      width: L,
+      height: h,
+      color: cream,
+      opacity: 0.06 * (9 - s),
+    });
+  }
 
   let y = bandTop - bandPadTop;
   y = drawLeftBoldLines(page, titulo.slice(0, 200), titleSz, textX, y, textW, inkTitle, fontBold, 7);
