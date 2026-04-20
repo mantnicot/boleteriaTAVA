@@ -47,6 +47,8 @@ async function buildTotalEventosExcel(events, boletas) {
     { header: 'Fecha evento', key: 'fechaEvento', width: 14 },
     { header: 'Código', key: 'codigoBoleta', width: 20 },
     { header: 'Creado', key: 'createdAt', width: 22 },
+    { header: 'Edad', key: 'edad', width: 8 },
+    { header: 'Teléfono', key: 'telefono', width: 16 },
   ];
 
   const eventMap = Object.fromEntries(events.map((ev) => [ev.eventId, ev.nombreProyecto]));

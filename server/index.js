@@ -63,6 +63,11 @@ const { buildTotalEventosExcel } = require('./excelReport');
 const validation = require('./validation');
 const { ROOT } = require('./paths');
 const googleAuth = require('./auth');
+const {
+  buildBoletaPdfFileName,
+  buildBoletaEmailSubject,
+  buildPdfContentDisposition,
+} = require('./boletaNaming');
 
 /**
  * API principal. Rutas relevantes:
@@ -397,7 +402,19 @@ app.get('/api/eventos/:id/asistentes', async (req, res) => {
       cantidad: b.cantidad,
       vendedor: b.vendedor,
       fecha: b.fechaEvento,
+      edad: b.edad || '',
+      telefono: b.telefono || '',
+      email: b.correo || '',
     }));
+    res.json(rows);
+  } catch (e) {
+    return apiError(res, e);
+  }
+});
+
+app.get('/api/reportes/asistentes-todos', async (req, res) => {
+  try {
+    const rows = await sheets.listAsistentesTodosUnicos();
     res.json(rows);
   } catch (e) {
     return apiError(res, e);
@@ -414,6 +431,8 @@ app.post('/api/boletas', async (req, res) => {
       cantidad,
       fechaEvento,
       vendedor,
+      edad,
+      telefono,
     } = req.body;
 
     if (!eventId || !nombre || !correo || !valorLabel || !fechaEvento || !vendedor) {
@@ -460,6 +479,8 @@ app.post('/api/boletas', async (req, res) => {
       vendedor: String(vendedor).trim(),
       codigoBoleta,
       createdAt: now,
+      edad: edad != null && edad !== '' ? String(edad).trim() : '',
+      telefono: telefono != null && telefono !== '' ? String(telefono).trim() : '',
     };
 
     await sheets.appendBoleta(boleta);
@@ -467,9 +488,18 @@ app.post('/api/boletas', async (req, res) => {
     const pdfBytes = await buildPdfForBoleta(boleta, event);
     const pdfBuffer = Buffer.from(pdfBytes);
 
+    const boletaNameParams = {
+      nombre: boleta.nombre,
+      nombreProyecto: event.nombreProyecto,
+      fecha: boleta.fechaEvento,
+      cantidad: boleta.cantidad,
+    };
+    const pdfFileName = buildBoletaPdfFileName(boletaNameParams);
+    const emailSubject = buildBoletaEmailSubject(boletaNameParams);
+
     let pdfDrive;
     try {
-      pdfDrive = await drive.uploadPdf(pdfBuffer, `boleta-${codigoBoleta}.pdf`);
+      pdfDrive = await drive.uploadPdf(pdfBuffer, pdfFileName);
     } catch (upErr) {
       console.error('Drive uploadPdf:', upErr);
       return res.status(500).json({
@@ -486,14 +516,11 @@ app.post('/api/boletas', async (req, res) => {
 
     if (isSmtpConfigured()) {
       try {
-        const subj = `${String(event.nombreProyecto || 'Evento').trim()} — ${String(boleta.nombre || '').trim()}`
-          .replace(/[\r\n]+/g, ' ')
-          .slice(0, 220);
         await sendBoletaEmail({
           to: boleta.correo,
-          subject: subj,
+          subject: emailSubject,
           pdfBuffer,
-          fileName: `boleta-${codigoBoleta}.pdf`,
+          fileName: pdfFileName,
           eventName: event.nombreProyecto,
           holderName: boleta.nombre,
           codigo: codigoBoleta,
@@ -530,8 +557,14 @@ app.get('/api/boletas/:id/pdf', async (req, res) => {
     const event = await sheets.getEventById(b.eventId);
     if (!event) return res.status(404).json({ error: 'Evento no encontrado' });
     const pdfBytes = await buildPdfForBoleta(b, event);
+    const pdfFileName = buildBoletaPdfFileName({
+      nombre: b.nombre,
+      nombreProyecto: event.nombreProyecto,
+      fecha: b.fechaEvento,
+      cantidad: b.cantidad,
+    });
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="boleta-${b.codigoBoleta}.pdf"`);
+    res.setHeader('Content-Disposition', buildPdfContentDisposition(pdfFileName));
     res.send(Buffer.from(pdfBytes));
   } catch (e) {
     return apiError(res, e);

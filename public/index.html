@@ -6,7 +6,23 @@
     <title>Sistema de boletería TAVA teatro</title>
     <link rel="stylesheet" href="/css/main.css" />
   </head>
-  <body>
+  <body class="auth-locked">
+    <div id="auth-gate-overlay" class="auth-gate-overlay" aria-modal="true" role="dialog" aria-labelledby="auth-gate-title">
+      <div class="auth-gate-card theater-login-panel">
+        <h2 id="auth-gate-title">Ingreso al camerino TAVA</h2>
+        <p class="theater-login-copy">
+          Accede con tu correo para habilitar la boletería y el panel administrativo.
+        </p>
+        <form id="login-form" class="theater-login-form">
+          <label for="login-email">Correo de acceso</label>
+          <input type="email" id="login-email" placeholder="tu-correo@dominio.com" required autocomplete="username" />
+          <button type="submit" class="btn btn-lg">Entrar al escenario</button>
+        </form>
+        <p class="theater-login-note">
+          Si tu correo no está autorizado, solicita acceso al administrador.
+        </p>
+      </div>
+    </div>
     <div class="bg-blur-layer" aria-hidden="true"></div>
     <div id="curtain-overlay" class="curtain-overlay hidden" aria-hidden="true">
       <div class="curtain-panel curtain-panel--left"></div>
@@ -103,20 +119,6 @@
           <div id="intro-lock-msg" class="intro-lock-msg hidden">
             Inicia sesión para acceder a Eventos, Boletas y Reportes.
           </div>
-          <section id="intro-login-panel" class="theater-login-panel">
-            <h2>Ingreso al camerino TAVA</h2>
-            <p class="theater-login-copy">
-              Accede con tu correo para habilitar la boletería y el panel administrativo.
-            </p>
-            <form id="login-form" class="theater-login-form">
-              <label for="login-email">Correo de acceso</label>
-              <input type="email" id="login-email" placeholder="tu-correo@dominio.com" required />
-              <button type="submit" class="btn btn-lg">Entrar al escenario</button>
-            </form>
-            <p class="theater-login-note">
-              Si tu correo no está autorizado, solicita acceso al administrador.
-            </p>
-          </section>
           <section id="allowed-emails-panel" class="allowed-emails-panel hidden">
             <h3>Gestión de correos permitidos</h3>
             <form id="allowed-email-form" class="allowed-email-form">
@@ -241,6 +243,14 @@
                   <input type="email" id="bl-correo" />
                 </div>
                 <div class="field">
+                  <label for="bl-edad">Edad (opcional)</label>
+                  <input type="text" id="bl-edad" inputmode="numeric" placeholder="ej. 28" />
+                </div>
+                <div class="field">
+                  <label for="bl-tel">Teléfono (opcional)</label>
+                  <input type="tel" id="bl-tel" placeholder="ej. 300 123 4567" />
+                </div>
+                <div class="field">
                   <label for="bl-valor">Valor boleta</label>
                   <select id="bl-valor"></select>
                 </div>
@@ -264,6 +274,9 @@
                     <thead>
                       <tr>
                         <th>Nombre</th>
+                        <th>Edad</th>
+                        <th>Teléfono</th>
+                        <th>Email</th>
                         <th>cantidad</th>
                         <th>vendedor</th>
                         <th>fecha</th>
@@ -305,6 +318,9 @@
               <button type="button" class="btn btn-lg" id="btn-total-excel" style="width: 100%">
                 TOTAL EVENTOS
               </button>
+              <button type="button" class="btn btn-lg" id="btn-asistentes-todos" style="width: 100%; margin-top: 0.65rem">
+                ASISTENTES ÚNICOS (TODOS LOS EVENTOS)
+              </button>
               <h3 style="font-size: 0.9rem; margin-top: 1.25rem; color: var(--burgundy)">
                 Lista de eventos
               </h3>
@@ -316,6 +332,25 @@
                       <th>Fecha</th>
                       <th>Vendidas</th>
                       <th>Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody></tbody>
+                </table>
+              </div>
+              <h3 style="font-size: 0.9rem; margin-top: 1.25rem; color: var(--burgundy)">
+                Asistentes únicos (contacto, sin repetir entre eventos)
+              </h3>
+              <p class="reports-note" style="margin-top: 0.25rem">
+                Misma persona con el mismo correo (o teléfono si no hay correo) aparece una sola vez.
+              </p>
+              <div class="mini-table-wrap">
+                <table class="data" id="tbl-asistentes-todos">
+                  <thead>
+                    <tr>
+                      <th>Nombre</th>
+                      <th>Edad</th>
+                      <th>Teléfono</th>
+                      <th>Email</th>
                     </tr>
                   </thead>
                   <tbody></tbody>

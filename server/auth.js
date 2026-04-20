@@ -87,12 +87,17 @@ function saveTokens(tokens) {
  */
 function getAuthorizationUrl() {
   const o = createOAuth2Client();
-  return o.generateAuthUrl({
+  const tokens = loadTokens();
+  const opts = {
     access_type: 'offline',
     scope: SCOPES,
-    prompt: 'consent',
     include_granted_scopes: true,
-  });
+  };
+  /** Forzar consentimiento solo si no hay refresh_token (evita doble pantalla de Google en cada uso). */
+  if (!tokens || !tokens.refresh_token) {
+    opts.prompt = 'consent';
+  }
+  return o.generateAuthUrl(opts);
 }
 
 /**

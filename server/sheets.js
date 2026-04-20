@@ -33,6 +33,8 @@ const BOLETA_HEADERS = [
   'vendedor',
   'codigoBoleta',
   'createdAt',
+  'edad',
+  'telefono',
 ];
 
 function ensureDataDir() {
@@ -95,6 +97,8 @@ function rowToBoleta(row) {
     vendedor: row[7] ?? '',
     codigoBoleta: row[8] ?? '',
     createdAt: row[9] ?? '',
+    edad: row[10] != null && row[10] !== '' ? String(row[10]).trim() : '',
+    telefono: row[11] != null && row[11] !== '' ? String(row[11]).trim() : '',
     total: cantidad * valorNum,
   };
 }
@@ -125,7 +129,7 @@ async function createSpreadsheet() {
         {
           properties: {
             title: SHEET_BOLETAS,
-            gridProperties: { rowCount: 10000, columnCount: 12 },
+            gridProperties: { rowCount: 10000, columnCount: 14 },
           },
         },
       ],
@@ -181,7 +185,7 @@ async function getBoletaRows() {
   const spreadsheetId = await getSpreadsheetId();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId,
-    range: `${SHEET_BOLETAS}!A2:J`,
+    range: `${SHEET_BOLETAS}!A2:L`,
   });
   return res.data.values || [];
 }
@@ -284,7 +288,7 @@ async function appendBoleta(boleta) {
   const spreadsheetId = await getSpreadsheetId();
   await sheets.spreadsheets.values.append({
     spreadsheetId,
-    range: `${SHEET_BOLETAS}!A:J`,
+    range: `${SHEET_BOLETAS}!A:L`,
     valueInputOption: 'USER_ENTERED',
     insertDataOption: 'INSERT_ROWS',
     requestBody: {
@@ -300,10 +304,47 @@ async function appendBoleta(boleta) {
           boleta.vendedor,
           boleta.codigoBoleta,
           boleta.createdAt,
+          boleta.edad != null && boleta.edad !== '' ? String(boleta.edad).trim() : '',
+          boleta.telefono != null && boleta.telefono !== '' ? String(boleta.telefono).trim() : '',
         ],
       ],
     },
   });
+}
+
+function asistenteDedupeKey(b) {
+  const email = String(b.correo || '')
+    .trim()
+    .toLowerCase();
+  if (email) return `e:${email}`;
+  const tel = String(b.telefono || '')
+    .replace(/\s+/g, '')
+    .trim();
+  if (tel) return `t:${tel}`;
+  return `n:${String(b.nombre || '')
+    .trim()
+    .toLowerCase()}`;
+}
+
+/**
+ * Contactos únicos entre todas las boletas (prioriza correo, luego teléfono, luego nombre).
+ */
+async function listAsistentesTodosUnicos() {
+  const all = await listBoletas();
+  const map = new Map();
+  for (const b of all) {
+    const k = asistenteDedupeKey(b);
+    if (map.has(k)) continue;
+    map.set(k, {
+      nombre: String(b.nombre || '').trim() || '—',
+      edad: b.edad ? String(b.edad).trim() : '—',
+      telefono: b.telefono ? String(b.telefono).trim() : '—',
+      email: String(b.correo || '').trim() || '—',
+    });
+  }
+  return Array.from(map.values()).sort((a, b) =>
+    a.nombre.localeCompare(b.nombre, 'es', { sensitivity: 'base' })
+  );
 }
 
 async function deleteBoletasByEvent(eventId) {
@@ -358,6 +399,7 @@ module.exports = {
   appendBoleta,
   deleteBoletasByEvent,
   getBoletaById,
+  listAsistentesTodosUnicos,
   rowToEvent,
   parseValor,
   SHEET_EVENTOS,

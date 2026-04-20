@@ -138,16 +138,17 @@
   function applyAuthUi() {
     const nav = document.querySelector('.main-nav');
     const lockMsg = $('#intro-lock-msg');
-    const loginPanel = $('#intro-login-panel');
+    const gate = $('#auth-gate-overlay');
     const userPill = $('#auth-user-pill');
     const logoutBtn = $('#btn-logout');
     const allowedPanel = $('#allowed-emails-panel');
 
     const logged = !!authState.loggedIn;
     document.body.classList.toggle('is-authenticated', logged);
+    document.body.classList.toggle('auth-locked', !logged);
+    if (gate) gate.classList.toggle('hidden', logged);
     if (nav) nav.classList.toggle('hidden', !logged);
     if (lockMsg) lockMsg.classList.toggle('hidden', logged);
-    if (loginPanel) loginPanel.classList.toggle('hidden', logged);
     if (userPill) {
       userPill.textContent = logged ? `Ingresaste como: ${authState.email}` : '';
       userPill.classList.toggle('hidden', !logged);
@@ -473,6 +474,7 @@
     );
 
     if (sel.value) await loadReporteDetalle();
+    loadAsistentesTodos().catch(() => {});
   }
 
   function fillBoletaFormFromEvent(e) {
@@ -528,9 +530,29 @@
     tb.innerHTML = '';
     rows.forEach((r) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${escapeHtml(r.nombre)}</td><td>${r.cantidad}</td><td>${escapeHtml(
+      tr.innerHTML = `<td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(String(r.edad || '—'))}</td><td>${escapeHtml(
+        String(r.telefono || '—')
+      )}</td><td>${escapeHtml(String(r.email || '—'))}</td><td>${r.cantidad}</td><td>${escapeHtml(
         r.vendedor
       )}</td><td>${escapeHtml(r.fecha)}</td>`;
+      tb.appendChild(tr);
+    });
+  }
+
+  async function loadAsistentesTodos() {
+    const tb = $('#tbl-asistentes-todos tbody');
+    if (!tb) return;
+    tb.innerHTML = '';
+    const rows = await api('/api/reportes/asistentes-todos');
+    if (!Array.isArray(rows) || rows.length === 0) {
+      tb.innerHTML = '<tr><td colspan="4">Sin asistentes registrados todavía.</td></tr>';
+      return;
+    }
+    rows.forEach((r) => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td>${escapeHtml(r.nombre)}</td><td>${escapeHtml(r.edad)}</td><td>${escapeHtml(
+        r.telefono
+      )}</td><td>${escapeHtml(r.email)}</td>`;
       tb.appendChild(tr);
     });
   }
@@ -541,8 +563,12 @@
     const nombre = $('#bl-nombre').value.trim() || '—';
     const fecha = $('#bl-fecha').value || '—';
     const cant = $('#bl-cant').value || '—';
+    const edad = ($('#bl-edad')?.value || '').trim() || '—';
+    const tel = ($('#bl-tel')?.value || '').trim() || '—';
     const codigo = '—';
     $('#ticket-left').innerHTML = `<strong>Nombre:</strong> ${escapeHtml(nombre)}<br/>
+      <strong>Edad:</strong> ${escapeHtml(edad)}<br/>
+      <strong>Teléfono:</strong> ${escapeHtml(tel)}<br/>
       <strong>Fecha:</strong> ${escapeHtml(fecha)}<br/>
       <strong>Cantidad:</strong> ${escapeHtml(String(cant))}<br/>
       <strong>Código boleta:</strong> ${codigo}<br/><br/>
@@ -758,7 +784,7 @@
     }
   });
 
-  ['bl-nombre', 'bl-fecha', 'bl-cant', 'bl-valor'].forEach((id) => {
+  ['bl-nombre', 'bl-correo', 'bl-fecha', 'bl-cant', 'bl-valor', 'bl-edad', 'bl-tel'].forEach((id) => {
     $(`#${id}`).addEventListener('input', updateTicketPreview);
     $(`#${id}`).addEventListener('change', updateTicketPreview);
   });
@@ -778,6 +804,8 @@
       cantidad: parseInt($('#bl-cant').value, 10),
       fechaEvento: $('#bl-fecha').value,
       vendedor: $('#bl-vend').value,
+      edad: ($('#bl-edad')?.value || '').trim(),
+      telefono: ($('#bl-tel')?.value || '').trim(),
     };
     try {
       const res = await withTheaterLoading(() =>
@@ -800,11 +828,26 @@
       await loadAsistentes(eventId);
       $('#bl-nombre').value = '';
       $('#bl-correo').value = '';
+      if ($('#bl-edad')) $('#bl-edad').value = '';
+      if ($('#bl-tel')) $('#bl-tel').value = '';
       updateTicketPreview();
+      loadAsistentesTodos().catch(() => {});
     } catch (e) {
       await showAlert('No permitido o error', e.message || String(e));
     }
   });
+
+  const btnAsistentesTodos = $('#btn-asistentes-todos');
+  if (btnAsistentesTodos) {
+    btnAsistentesTodos.addEventListener('click', async () => {
+      try {
+        await withTheaterLoading(() => loadAsistentesTodos());
+        await showAlert('Listo', 'Tabla de asistentes únicos actualizada.');
+      } catch (e) {
+        await showAlert('Error', e.message || String(e));
+      }
+    });
+  }
 
   $('#btn-total-excel').addEventListener('click', async () => {
     const ok = await showConfirm('Confirmar', '¿Generar y descargar el Excel con todos los eventos y boletas?');

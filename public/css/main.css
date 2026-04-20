@@ -140,6 +140,33 @@ body {
   background: rgba(255, 255, 255, 0.72);
 }
 
+.auth-gate-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 19000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(18, 4, 8, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
+
+.auth-gate-overlay.hidden {
+  display: none !important;
+}
+
+.auth-gate-card {
+  width: 100%;
+  max-width: 440px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.55);
+}
+
+body.auth-locked {
+  overflow: hidden;
+}
+
 .app-shell {
   position: relative;
   z-index: 1;
@@ -962,7 +989,7 @@ table.data tr:nth-child(even) td {
   color: #ffffff;
   padding: 10px;
   border-radius: 8px;
-  font-size: 0.72rem;
+  font-size: 0.82rem;
   line-height: 1.45;
   border: 1px solid rgba(255, 255, 255, 0.18);
   box-shadow: 0 6px 22px rgba(0, 0, 0, 0.35);

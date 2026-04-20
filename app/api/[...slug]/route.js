@@ -14,6 +14,11 @@ const { buildTotalEventosExcel } = require('../../../server/excelReport');
 const validation = require('../../../server/validation');
 const googleAuth = require('../../../server/auth');
 const allowedEmails = require('../../../server/allowedEmails');
+const {
+  buildBoletaPdfFileName,
+  buildBoletaEmailSubject,
+  buildPdfContentDisposition,
+} = require('../../../server/boletaNaming');
 
 const SESSION_COOKIE = 'tava_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
@@ -338,8 +343,16 @@ export async function GET(request, { params }) {
           cantidad: b.cantidad,
           vendedor: b.vendedor,
           fecha: b.fechaEvento,
+          edad: b.edad || '',
+          telefono: b.telefono || '',
+          email: b.correo || '',
         }))
       );
+    }
+
+    if (path[0] === 'reportes' && path[1] === 'asistentes-todos' && path.length === 2) {
+      const rows = await sheets.listAsistentesTodosUnicos();
+      return json(rows);
     }
 
     if (pathIs(path, 'boletas')) {
@@ -354,11 +367,17 @@ export async function GET(request, { params }) {
       if (!event) return json({ error: 'Evento no encontrado' }, 404);
 
       const pdfBytes = await buildPdfForBoleta(b, event);
+      const pdfFileName = buildBoletaPdfFileName({
+        nombre: b.nombre,
+        nombreProyecto: event.nombreProyecto,
+        fecha: b.fechaEvento,
+        cantidad: b.cantidad,
+      });
       return new NextResponse(Buffer.from(pdfBytes), {
         status: 200,
         headers: {
           'Content-Type': 'application/pdf',
-          'Content-Disposition': `attachment; filename="boleta-${b.codigoBoleta}.pdf"`,
+          'Content-Disposition': buildPdfContentDisposition(pdfFileName),
         },
       });
     }
@@ -491,7 +510,8 @@ export async function POST(request, { params }) {
 
     if (pathIs(path, 'boletas')) {
       const body = (await request.json().catch(() => ({}))) || {};
-      const { eventId, nombre, correo, valorLabel, cantidad, fechaEvento, vendedor } = body;
+      const { eventId, nombre, correo, valorLabel, cantidad, fechaEvento, vendedor, edad, telefono } =
+        body;
 
       if (!eventId || !nombre || !correo || !valorLabel || !fechaEvento || !vendedor) {
         return json({ error: 'Complete todos los campos obligatorios.' }, 400);
@@ -537,6 +557,8 @@ export async function POST(request, { params }) {
         vendedor: String(vendedor).trim(),
         codigoBoleta,
         createdAt: now,
+        edad: edad != null && edad !== '' ? String(edad).trim() : '',
+        telefono: telefono != null && telefono !== '' ? String(telefono).trim() : '',
       };
 
       await sheets.appendBoleta(boleta);
@@ -544,7 +566,27 @@ export async function POST(request, { params }) {
       const pdfBytes = await buildPdfForBoleta(boleta, event);
       const pdfBuffer = Buffer.from(pdfBytes);
 
-      const pdfDrive = await drive.uploadPdf(pdfBuffer, `boleta-${codigoBoleta}.pdf`);
+      const boletaNameParams = {
+        nombre: boleta.nombre,
+        nombreProyecto: event.nombreProyecto,
+        fecha: boleta.fechaEvento,
+        cantidad: boleta.cantidad,
+      };
+      const pdfFileName = buildBoletaPdfFileName(boletaNameParams);
+      const emailSubject = buildBoletaEmailSubject(boletaNameParams);
+
+      let pdfDrive;
+      try {
+        pdfDrive = await drive.uploadPdf(pdfBuffer, pdfFileName);
+      } catch (upErr) {
+        console.error('Drive uploadPdf:', upErr);
+        return json(
+          {
+            error: `No se pudo guardar el PDF en Google Drive: ${upErr.message || upErr}`,
+          },
+          500
+        );
+      }
       const pdfDriveUrl =
         pdfDrive.webViewLink || `https://drive.google.com/file/d/${pdfDrive.id}/view`;
 
@@ -554,16 +596,11 @@ export async function POST(request, { params }) {
 
       if (isSmtpConfigured()) {
         try {
-          const subj = `${String(event.nombreProyecto || 'Evento').trim()} — ${String(
-            boleta.nombre || ''
-          ).trim()}`
-            .replace(/[\r\n]+/g, ' ')
-            .slice(0, 220);
           await sendBoletaEmail({
             to: boleta.correo,
-            subject: subj,
+            subject: emailSubject,
             pdfBuffer,
-            fileName: `boleta-${codigoBoleta}.pdf`,
+            fileName: pdfFileName,
             eventName: event.nombreProyecto,
             holderName: boleta.nombre,
             codigo: codigoBoleta,
