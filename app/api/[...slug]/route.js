@@ -205,7 +205,7 @@ function apiError(error) {
         error:
           error.code === 'OAUTH_REQUIRED'
             ? error.message
-            : 'La autorización de Google no es válida en este entorno. Vuelve a conectar tu cuenta en /auth/google.',
+            : 'La autorización de Google no es válida en este entorno. Cierra sesión y vuelve a entrar con tu correo para repetir la vinculación con Google.',
         code: 'OAUTH_REQUIRED',
         authUrl: '/auth/google',
       },
@@ -292,9 +292,12 @@ export async function GET(request, { params }) {
     if (requiresAuth(path) && !sessionEmail) return authRequired();
 
     if (pathIs(path, 'setup')) {
-      const hasOAuth = googleAuth.hasOAuthTokens();
+      let oauthReady = false;
+      if (googleAuth.hasOAuthTokens()) {
+        oauthReady = await googleAuth.verifyGoogleOAuthWorks();
+      }
       let spreadsheetId = null;
-      if (hasOAuth) {
+      if (oauthReady) {
         try {
           spreadsheetId = await sheets.getSpreadsheetId();
         } catch {
@@ -303,9 +306,9 @@ export async function GET(request, { params }) {
       }
       return json({
         ok: true,
-        hasCredentials: hasOAuth,
+        hasCredentials: oauthReady,
         hasDriveFolder: true,
-        needsOAuth: !hasOAuth,
+        needsOAuth: !oauthReady,
         authUrl: '/auth/google',
         spreadsheetId,
       });

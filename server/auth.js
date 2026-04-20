@@ -127,7 +127,7 @@ async function getOAuth2ClientReady() {
   const tokens = loadTokens();
   if (!tokens || (!tokens.refresh_token && !tokens.access_token)) {
     const err = new Error(
-      'Cuenta de Google no vinculada. Usa «Conectar cuenta Google» en la pantalla de ingreso (mismo equipo donde corre el servidor).'
+      'Cuenta de Google no vinculada o inválida. Vuelve a entrar con tu correo en «Entrar al escenario» para vincular Google en este equipo.'
     );
     err.code = 'OAUTH_REQUIRED';
     throw err;
@@ -167,6 +167,28 @@ function hasOAuthTokens() {
   return Boolean(t && (t.refresh_token || t.access_token));
 }
 
+/**
+ * Comprueba que los tokens permiten obtener un access_token válido (refresh real contra Google).
+ * Si los tokens están revocados o no corresponden a este cliente, devuelve false y borra el archivo local.
+ */
+async function verifyGoogleOAuthWorks() {
+  try {
+    const auth = await getOAuth2ClientReady();
+    const t = await auth.getAccessToken();
+    return Boolean(t && t.token);
+  } catch (e) {
+    const msg = String(e?.message || e || '').toLowerCase();
+    const shouldClearFile =
+      !process.env.GOOGLE_OAUTH_TOKENS_JSON &&
+      (msg.includes('invalid_grant') ||
+        msg.includes('invalid_client') ||
+        msg.includes('unauthorized_client') ||
+        msg.includes('token has been expired or revoked'));
+    if (shouldClearFile) clearOAuthTokens();
+    return false;
+  }
+}
+
 module.exports = {
   getAuthorizationUrl,
   saveTokensFromCode,
@@ -175,6 +197,7 @@ module.exports = {
   getDriveClient,
   getAuth,
   hasOAuthTokens,
+  verifyGoogleOAuthWorks,
   getRedirectUri,
   clearOAuthTokens,
   SCOPES,

@@ -424,7 +424,7 @@
       if (r.status === 401 && typeof data === 'object' && data.code === 'OAUTH_REQUIRED') {
         const err = new Error(
           (data.error || 'Debes reconectar Google para continuar.') +
-            '\n\nUsa el enlace «Conectar cuenta Google» en la pantalla de ingreso y vuelve a intentar.'
+            '\n\nCierra sesión y pulsa de nuevo «Entrar al escenario» con tu correo para vincular Google.'
         );
         err.code = 'OAUTH_REQUIRED';
         err.authUrl = data.authUrl || '/auth/google';
@@ -449,7 +449,7 @@
     if (res.status === 401 && data.code === 'OAUTH_REQUIRED') {
       const err = new Error(
         (data.error || 'Debes reconectar Google para continuar.') +
-          '\n\nUsa el enlace «Conectar cuenta Google» en la pantalla de ingreso y vuelve a intentar.'
+          '\n\nCierra sesión y pulsa de nuevo «Entrar al escenario» con tu correo para vincular Google.'
       );
       err.code = 'OAUTH_REQUIRED';
       err.authUrl = data.authUrl || '/auth/google';

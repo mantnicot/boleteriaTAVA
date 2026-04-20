@@ -223,9 +223,12 @@ app.get('/oauth2callback', async (req, res) => {
 
 app.get('/api/setup', async (req, res) => {
   try {
-    const hasOAuth = googleAuth.hasOAuthTokens();
+    let oauthReady = false;
+    if (googleAuth.hasOAuthTokens()) {
+      oauthReady = await googleAuth.verifyGoogleOAuthWorks();
+    }
     let spreadsheetId = null;
-    if (hasOAuth) {
+    if (oauthReady) {
       try {
         spreadsheetId = await sheets.getSpreadsheetId();
       } catch (_) {
@@ -234,9 +237,9 @@ app.get('/api/setup', async (req, res) => {
     }
     res.json({
       ok: true,
-      hasCredentials: hasOAuth,
+      hasCredentials: oauthReady,
       hasDriveFolder: true,
-      needsOAuth: !hasOAuth,
+      needsOAuth: !oauthReady,
       authUrl: '/auth/google',
       spreadsheetId,
     });
