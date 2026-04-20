@@ -613,33 +613,6 @@ main.main-content {
   color: rgba(253, 235, 208, 0.84);
 }
 
-.auth-google-hint {
-  margin: 1rem 0 0.5rem;
-  font-size: 0.76rem;
-  line-height: 1.45;
-  color: rgba(255, 248, 240, 0.88);
-  text-align: center;
-}
-
-.auth-google-btn {
-  display: block;
-  width: 100%;
-  text-align: center;
-  text-decoration: none;
-  margin-top: 0.15rem;
-  padding: 0.55rem 0.75rem;
-  font-size: 0.88rem;
-  font-weight: 700;
-  color: #fff !important;
-  background: rgba(0, 0, 0, 0.25);
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  border-radius: 10px;
-}
-
-.auth-google-btn:hover {
-  background: rgba(0, 0, 0, 0.38);
-}
-
 .allowed-emails-panel {
   margin: 1rem auto 0;
   max-width: 540px;

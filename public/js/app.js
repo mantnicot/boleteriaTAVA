@@ -164,6 +164,74 @@
     }
   }
 
+  /** Aplauso breve (Web Audio); puede fallar en silencio si el navegador bloquea audio sin gesto del usuario. */
+  function playApplauseSound() {
+    try {
+      const Ctx = window.AudioContext || window.webkitAudioContext;
+      if (!Ctx) return;
+      const ctx = new Ctx();
+      const master = ctx.createGain();
+      master.gain.value = 0.42;
+      master.connect(ctx.destination);
+
+      const dur = 2.6;
+      const t0 = ctx.currentTime + 0.02;
+      const nBurst = 32;
+      for (let i = 0; i < nBurst; i++) {
+        const len = 0.06 + Math.random() * 0.05;
+        const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * len), ctx.sampleRate);
+        const ch = buf.getChannelData(0);
+        for (let s = 0; s < ch.length; s++) {
+          ch[s] = (Math.random() * 2 - 1) * (1 - s / ch.length) * 0.95;
+        }
+        const src = ctx.createBufferSource();
+        src.buffer = buf;
+        const bp = ctx.createBiquadFilter();
+        bp.type = 'bandpass';
+        bp.frequency.value = 900 + Math.random() * 2200;
+        bp.Q.value = 0.65;
+        const g = ctx.createGain();
+        g.gain.value = 0.0001;
+        const start = t0 + Math.random() * dur;
+        g.gain.setValueAtTime(0.0001, start);
+        g.gain.exponentialRampToValueAtTime(0.12 + Math.random() * 0.18, start + 0.012);
+        g.gain.exponentialRampToValueAtTime(0.0001, start + len);
+        src.connect(bp);
+        bp.connect(g);
+        g.connect(master);
+        src.start(start);
+        src.stop(start + len + 0.02);
+      }
+
+      const crowd = ctx.createBufferSource();
+      const crowdLen = 1.8;
+      const crowdBuf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * crowdLen), ctx.sampleRate);
+      const cd = crowdBuf.getChannelData(0);
+      for (let s = 0; s < cd.length; s++) cd[s] = (Math.random() * 2 - 1) * 0.35;
+      crowd.buffer = crowdBuf;
+      const low = ctx.createBiquadFilter();
+      low.type = 'lowpass';
+      low.frequency.value = 1400;
+      const cg = ctx.createGain();
+      cg.gain.setValueAtTime(0.0001, t0);
+      cg.gain.exponentialRampToValueAtTime(0.22, t0 + 0.35);
+      cg.gain.exponentialRampToValueAtTime(0.08, t0 + 1.2);
+      cg.gain.exponentialRampToValueAtTime(0.0001, t0 + crowdLen);
+      crowd.connect(low);
+      low.connect(cg);
+      cg.connect(master);
+      crowd.start(t0);
+      crowd.stop(t0 + crowdLen);
+
+      ctx.resume().catch(() => {});
+      window.setTimeout(() => {
+        ctx.close().catch(() => {});
+      }, (dur + 0.6) * 1000);
+    } catch (_) {
+      /* sin audio */
+    }
+  }
+
   function playCurtainIntro() {
     const overlay = $('#curtain-overlay');
     if (!overlay || curtainState.playing) return;
@@ -172,6 +240,7 @@
     overlay.classList.remove('opening');
     void overlay.offsetWidth;
     overlay.classList.add('opening');
+    playApplauseSound();
     window.setTimeout(() => {
       overlay.classList.add('hidden');
       overlay.classList.remove('opening');
@@ -935,10 +1004,6 @@
   async function init() {
     const qs = new URLSearchParams(window.location.search);
     if (qs.get('oauth') === 'ok') {
-      await showAlert(
-        'Cuenta vinculada',
-        'Tu cuenta de Google quedó conectada. Sheets y Drive ya están disponibles.'
-      );
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     } else if (qs.get('oauth') === 'error') {
       await showAlert(
@@ -957,23 +1022,23 @@
       authState.loggedIn = false;
       authState.email = '';
     }
-    applyAuthUi();
 
     try {
       if (authState.loggedIn) {
         const s = await withTheaterLoading(() => api('/api/setup'));
         if (s.needsOAuth) {
-          await showAlert(
-            'Conectar Google',
-            'Para usar el sistema debes vincular tu cuenta Google en este equipo. Se abrirá la página de autorización.'
-          );
           window.location.href = s.authUrl || '/auth/google';
           return;
         }
-        if (!sessionStorage.getItem('tava-curtain-opened')) {
-          sessionStorage.setItem('tava-curtain-opened', '1');
-          playCurtainIntro();
-        }
+      }
+    } catch (_) {}
+
+    applyAuthUi();
+
+    try {
+      if (authState.loggedIn && !sessionStorage.getItem('tava-curtain-opened')) {
+        sessionStorage.setItem('tava-curtain-opened', '1');
+        playCurtainIntro();
       }
     } catch (_) {}
     if (!location.hash) location.hash = '#inicio';
@@ -999,16 +1064,12 @@
           );
           authState.loggedIn = !!out.loggedIn;
           authState.email = out.email || email;
-          applyAuthUi();
           const s = await withTheaterLoading(() => api('/api/setup'));
           if (s.needsOAuth) {
-            await showAlert(
-              'Conectar Google',
-              'Para usar el sistema debes vincular tu cuenta Google. Se abrirá la página de autorización.'
-            );
             window.location.href = s.authUrl || '/auth/google';
             return;
           }
+          applyAuthUi();
           sessionStorage.setItem('tava-curtain-opened', '1');
           playCurtainIntro();
           await loadAllowedEmails().catch(() => {});
