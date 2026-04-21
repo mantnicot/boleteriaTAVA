@@ -1,0 +1,9 @@
+node_modules/
+.next/
+.env
+.env.local
+.env.*.local
+data/
+credentials*.json
+service-account*.json
+Mucha mierda.lnk
