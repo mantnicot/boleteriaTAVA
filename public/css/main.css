@@ -1332,6 +1332,27 @@ select.wide-label {
   background: #111;
 }
 
+.oauth-fail-bar {
+  position: relative;
+  z-index: 16000;
+  width: 100%;
+  background: #4a0a18;
+  color: #fff;
+  margin: 0;
+  padding: 0.45rem 0.9rem;
+  text-align: center;
+  font-size: 0.86rem;
+  line-height: 1.4;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.oauth-fail-bar p {
+  margin: 0;
+  max-width: 52rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
 .verif-toast {
   position: fixed;
   bottom: 1.25rem;

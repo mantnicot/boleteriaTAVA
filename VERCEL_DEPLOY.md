@@ -44,3 +44,20 @@ Por eso en producción usa:
 - `GOOGLE_SHEETS_ID`
 
 de forma que la app no necesite escribir en `data/`.
+
+## 5) Error `invalid_client` o bucle a Google
+
+Significa que **Google no reconoce el cliente OAuth** que usan Vercel y el código.
+
+1. En [Google Cloud Console](https://console.cloud.google.com/) → **APIs y servicios** → **Credenciales**, abre el tipo **ID de cliente OAuth (aplicación web)**.
+2. Copia el **ID de cliente** y el **Secreto del cliente** (no uses otro tipo de clave, ni de escritorio, ni de iOS).
+3. En Vercel → **Settings** → **Environment variables**, pega:
+   - `GOOGLE_CLIENT_ID` = el mismo string completo
+   - `GOOGLE_CLIENT_SECRET` = el mismo secreto
+4. Añade en **URIs de redirección autorizados** (en esa misma credencial web):
+   - `https://<tu-dominio-en-vercel>/oauth2callback`  
+   exactamente igual, con `https`, sin barra al final, sin otra ruta.
+5. En Vercel define también:
+   - `GOOGLE_REDIRECT_URI` = `https://<mismo-dominio>/oauth2callback`
+6. Vuelve a desplegar (o **Redeploy**). Tras cambiar variables, hace falta un deploy nuevo a veces.
+7. En el navegador, vuelve a **Entrar al escenario** con tu correo (limpia caché o ventana de incógnito si hace falta).

@@ -39,6 +39,8 @@
   let verifScanInterval = null;
   const curtainState = { playing: false };
   const CURTAIN_ANIM_MS = 9200;
+  /** Evita bucle a Google si OAuth falló (p. ej. invalid_client) o demasiados intentos. */
+  const OAUTH_STOP_KEY = 'tava_oauth_stop';
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -369,6 +371,31 @@
     }
   }
 
+  function updateOauthFailBar() {
+    const bar = $('#oauth-fail-bar');
+    const textEl = $('#oauth-fail-text');
+    if (!bar || !textEl) return;
+    const reason = sessionStorage.getItem(OAUTH_STOP_KEY) || '';
+    if (!authState.loggedIn || !reason) {
+      bar.classList.add('hidden');
+      return;
+    }
+    let msg;
+    if (reason === 'invalid_client' || reason.includes('invalid_client')) {
+      msg =
+        'Error OAuth (invalid_client): en Vercel, GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben ser exactamente el ID de cliente y el secreto de “Aplicación web” en Google Cloud. La URI de redirección autorizada debe ser: https://TU_DOMINIO/oauth2callback';
+    } else if (reason === 'max_redirects') {
+      msg =
+        'No se pudo vincular Google en varios intentos. Revisa variables de entorno y vuelve a pulsar «Entrar al escenario».';
+    } else if (String(reason).includes('access_denied')) {
+      msg = 'Vinculación cancelada o denegada en Google. Vuelve a intentar o revisa la cuenta con la que aceptas permisos.';
+    } else {
+      msg = `Vinculación con Google no completada (${reason.slice(0, 120)}). Revisa Vercel y Google Cloud.`;
+    }
+    textEl.textContent = msg;
+    bar.classList.remove('hidden');
+  }
+
   function applyAuthUi() {
     const nav = document.querySelector('.main-nav');
     const lockMsg = $('#intro-lock-msg');
@@ -395,6 +422,7 @@
       curtain.classList.remove('hidden');
       curtain.classList.remove('opening');
     }
+    updateOauthFailBar();
   }
 
   /** Aplauso breve (Web Audio); puede fallar en silencio si el navegador bloquea audio sin gesto del usuario. */
@@ -1411,13 +1439,16 @@
   async function init() {
     const qs = new URLSearchParams(window.location.search);
     if (qs.get('oauth') === 'ok') {
+      sessionStorage.removeItem(OAUTH_STOP_KEY);
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     } else if (qs.get('oauth') === 'error') {
-      await showAlert(
-        'No se pudo conectar',
-        decodeURIComponent(qs.get('reason') || 'Error desconocido') +
-          '\n\nRevisa GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET en .env y que la URI de redirección en Google Cloud sea exactamente la de GOOGLE_REDIRECT_URI.'
-      );
+      let reason = (qs.get('reason') || 'error').replace(/\+/g, ' ');
+      try {
+        reason = decodeURIComponent(reason);
+      } catch (_) {
+        /* literal */
+      }
+      sessionStorage.setItem(OAUTH_STOP_KEY, reason.trim());
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     }
 
@@ -1434,20 +1465,23 @@
       if (authState.loggedIn) {
         const s = await withTheaterLoading(() => api('/api/setup'));
         if (s.needsOAuth) {
-          const n = parseInt(sessionStorage.getItem('tava_oauth_redirects') || '0', 10);
-          if (n >= 5) {
+          if (sessionStorage.getItem(OAUTH_STOP_KEY)) {
+            /* OAuth falló o demasiados intentos: no redirigir a Google otra vez (bucle) */
             sessionStorage.removeItem('tava_oauth_redirects');
-            await showAlert(
-              'No se pudo vincular Google',
-              'Demasiados intentos. Revisa en Vercel GOOGLE_REDIRECT_URI y variables. Si persiste, usa GOOGLE_OAUTH_TOKENS_JSON (ver VERCEL_DEPLOY.md).'
-            );
           } else {
-            sessionStorage.setItem('tava_oauth_redirects', String(n + 1));
-            window.location.href = s.authUrl || '/auth/google';
-            return;
+            const n = parseInt(sessionStorage.getItem('tava_oauth_redirects') || '0', 10);
+            if (n >= 3) {
+              sessionStorage.setItem(OAUTH_STOP_KEY, 'max_redirects');
+              sessionStorage.removeItem('tava_oauth_redirects');
+            } else {
+              sessionStorage.setItem('tava_oauth_redirects', String(n + 1));
+              window.location.href = s.authUrl || '/auth/google';
+              return;
+            }
           }
         } else {
           sessionStorage.removeItem('tava_oauth_redirects');
+          sessionStorage.removeItem(OAUTH_STOP_KEY);
         }
       }
     } catch (_) {}
@@ -1473,6 +1507,7 @@
           await showAlert('Correo requerido', 'Ingresa un correo para iniciar sesión.');
           return;
         }
+        sessionStorage.removeItem(OAUTH_STOP_KEY);
         try {
           const out = await withTheaterLoading(() =>
             api('/api/auth/login', {
@@ -1530,6 +1565,7 @@
         authState.loggedIn = false;
         authState.email = '';
         sessionStorage.removeItem('tava-curtain-opened');
+        sessionStorage.removeItem(OAUTH_STOP_KEY);
         applyAuthUi();
         renderAllowedEmails([]);
         location.hash = '#inicio';
