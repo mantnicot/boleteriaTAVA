@@ -41,6 +41,7 @@
   const CURTAIN_ANIM_MS = 9200;
   /** Evita bucle a Google si OAuth falló (p. ej. invalid_client) o demasiados intentos. */
   const OAUTH_STOP_KEY = 'tava_oauth_stop';
+  const oauthConsoleDone = new Set();
 
   const $ = (sel, root = document) => root.querySelector(sel);
   const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -371,29 +372,35 @@
     }
   }
 
-  function updateOauthFailBar() {
-    const bar = $('#oauth-fail-bar');
-    const textEl = $('#oauth-fail-text');
-    if (!bar || !textEl) return;
+  function messageForOauthStopReason(reason) {
+    if (reason === 'invalid_client' || String(reason).includes('invalid_client')) {
+      return (
+        'Error OAuth (invalid_client): en Vercel, GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben ser el ID y el secreto de “Aplicación web” en Google Cloud. ' +
+        'La URI de redirección autorizada en esa credencial debe ser https://TU_DOMINIO/oauth2callback (mismo dominio que el despliegue).'
+      );
+    }
+    if (reason === 'max_redirects') {
+      return 'No se pudo vincular Google en varios intentos. Revisa variables de entorno y vuelve a pulsar «Entrar al escenario».';
+    }
+    if (String(reason).includes('access_denied')) {
+      return 'Vinculación cancelada o denegada en Google. Vuelve a intentar o revisa la cuenta con la que aceptas permisos.';
+    }
+    return `Vinculación con Google no completada (${String(reason).slice(0, 120)}). Revisa Vercel y Google Cloud.`;
+  }
+
+  /** Avisos OAuth solo en consola (evita bucle; no inunda repitiendo el mismo motivo). */
+  function logOauthStopOnce() {
     const reason = sessionStorage.getItem(OAUTH_STOP_KEY) || '';
-    if (!authState.loggedIn || !reason) {
-      bar.classList.add('hidden');
-      return;
-    }
-    let msg;
-    if (reason === 'invalid_client' || reason.includes('invalid_client')) {
-      msg =
-        'Error OAuth (invalid_client): en Vercel, GOOGLE_CLIENT_ID y GOOGLE_CLIENT_SECRET deben ser exactamente el ID de cliente y el secreto de “Aplicación web” en Google Cloud. La URI de redirección autorizada debe ser: https://TU_DOMINIO/oauth2callback';
-    } else if (reason === 'max_redirects') {
-      msg =
-        'No se pudo vincular Google en varios intentos. Revisa variables de entorno y vuelve a pulsar «Entrar al escenario».';
-    } else if (String(reason).includes('access_denied')) {
-      msg = 'Vinculación cancelada o denegada en Google. Vuelve a intentar o revisa la cuenta con la que aceptas permisos.';
-    } else {
-      msg = `Vinculación con Google no completada (${reason.slice(0, 120)}). Revisa Vercel y Google Cloud.`;
-    }
-    textEl.textContent = msg;
-    bar.classList.remove('hidden');
+    if (!authState.loggedIn || !reason) return;
+    const key = `logged:${reason}`;
+    if (oauthConsoleDone.has(key)) return;
+    oauthConsoleDone.add(key);
+    console.warn('[TAVA OAuth]', messageForOauthStopReason(reason));
+  }
+
+  function clearOauthStopKey() {
+    sessionStorage.removeItem(OAUTH_STOP_KEY);
+    oauthConsoleDone.clear();
   }
 
   function applyAuthUi() {
@@ -422,7 +429,7 @@
       curtain.classList.remove('hidden');
       curtain.classList.remove('opening');
     }
-    updateOauthFailBar();
+    logOauthStopOnce();
   }
 
   /** Aplauso breve (Web Audio); puede fallar en silencio si el navegador bloquea audio sin gesto del usuario. */
@@ -1439,7 +1446,7 @@
   async function init() {
     const qs = new URLSearchParams(window.location.search);
     if (qs.get('oauth') === 'ok') {
-      sessionStorage.removeItem(OAUTH_STOP_KEY);
+      clearOauthStopKey();
       window.history.replaceState({}, '', window.location.pathname + window.location.hash);
     } else if (qs.get('oauth') === 'error') {
       let reason = (qs.get('reason') || 'error').replace(/\+/g, ' ');
@@ -1481,7 +1488,7 @@
           }
         } else {
           sessionStorage.removeItem('tava_oauth_redirects');
-          sessionStorage.removeItem(OAUTH_STOP_KEY);
+          clearOauthStopKey();
         }
       }
     } catch (_) {}
@@ -1507,7 +1514,7 @@
           await showAlert('Correo requerido', 'Ingresa un correo para iniciar sesión.');
           return;
         }
-        sessionStorage.removeItem(OAUTH_STOP_KEY);
+        clearOauthStopKey();
         try {
           const out = await withTheaterLoading(() =>
             api('/api/auth/login', {
@@ -1565,7 +1572,7 @@
         authState.loggedIn = false;
         authState.email = '';
         sessionStorage.removeItem('tava-curtain-opened');
-        sessionStorage.removeItem(OAUTH_STOP_KEY);
+        clearOauthStopKey();
         applyAuthUi();
         renderAllowedEmails([]);
         location.hash = '#inicio';
