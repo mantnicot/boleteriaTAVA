@@ -1,0 +1,8 @@
+---
+description: Tras cambios en el repo, siempre commit y push al remoto
+alwaysApply: true
+---
+
+# Git: push tras cambios
+
+Cada vez que modifiques código en este proyecto y hagas **commit**, termina con **`git push`** a la rama actual (habitualmente `origin main`). No dejes commits solo en local salvo que el usuario pida explícitamente lo contrario.
