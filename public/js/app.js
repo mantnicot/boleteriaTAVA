@@ -660,6 +660,7 @@
 
   async function api(path, opts = {}) {
     const r = await fetch(path, {
+      credentials: 'include',
       headers: { Accept: 'application/json', ...(opts.headers || {}) },
       ...opts,
     });
@@ -1085,7 +1086,9 @@
     const file = $('#ev-fondo').files[0];
     if (file) fd.append('fondo', file);
     try {
-      const r = await withTheaterLoading(() => fetch('/api/eventos', { method: 'POST', body: fd }));
+      const r = await withTheaterLoading(() =>
+        fetch('/api/eventos', { method: 'POST', body: fd, credentials: 'include' })
+      );
       await fetchOAuthJson(r);
       await showAlert('Éxito', 'El evento se guardó correctamente.');
       resetEvForm();
@@ -1139,6 +1142,7 @@
       const res = await withTheaterLoading(() =>
         fetch('/api/boletas', {
           method: 'POST',
+          credentials: 'include',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         })
@@ -1181,7 +1185,9 @@
     const ok = await showConfirm('Confirmar', '¿Generar y descargar el Excel con todos los eventos y boletas?');
     if (!ok) return;
     try {
-      const r = await withTheaterLoading(() => fetch('/api/reportes/excel/total-eventos'));
+      const r = await withTheaterLoading(() =>
+        fetch('/api/reportes/excel/total-eventos', { credentials: 'include' })
+      );
       if (!r.ok) {
         const errData = await r.json().catch(() => ({}));
         if (r.status === 401 && errData.code === 'OAUTH_REQUIRED') {
@@ -1218,7 +1224,9 @@
     const file = $('#ed-fondo').files[0];
     if (file) fd.append('fondo', file);
     try {
-      const r = await withTheaterLoading(() => fetch(`/api/eventos/${id}`, { method: 'PUT', body: fd }));
+      const r = await withTheaterLoading(() =>
+        fetch(`/api/eventos/${id}`, { method: 'PUT', body: fd, credentials: 'include' })
+      );
       await fetchOAuthJson(r);
       await showAlert('Éxito', 'Evento actualizado.');
       closeEditModal();
@@ -1237,7 +1245,9 @@
     );
     if (!ok) return;
     try {
-      const r = await withTheaterLoading(() => fetch(`/api/eventos/${id}`, { method: 'DELETE' }));
+      const r = await withTheaterLoading(() =>
+        fetch(`/api/eventos/${id}`, { method: 'DELETE', credentials: 'include' })
+      );
       await fetchOAuthJson(r);
       await showAlert('Éxito', 'Evento eliminado.');
       closeEditModal();
@@ -1424,8 +1434,20 @@
       if (authState.loggedIn) {
         const s = await withTheaterLoading(() => api('/api/setup'));
         if (s.needsOAuth) {
-          window.location.href = s.authUrl || '/auth/google';
-          return;
+          const n = parseInt(sessionStorage.getItem('tava_oauth_redirects') || '0', 10);
+          if (n >= 5) {
+            sessionStorage.removeItem('tava_oauth_redirects');
+            await showAlert(
+              'No se pudo vincular Google',
+              'Demasiados intentos. Revisa en Vercel GOOGLE_REDIRECT_URI y variables. Si persiste, usa GOOGLE_OAUTH_TOKENS_JSON (ver VERCEL_DEPLOY.md).'
+            );
+          } else {
+            sessionStorage.setItem('tava_oauth_redirects', String(n + 1));
+            window.location.href = s.authUrl || '/auth/google';
+            return;
+          }
+        } else {
+          sessionStorage.removeItem('tava_oauth_redirects');
         }
       }
     } catch (_) {}

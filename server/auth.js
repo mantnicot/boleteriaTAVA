@@ -54,6 +54,13 @@ function createOAuth2Client() {
 
 function loadTokens() {
   if (memoryTokens) return memoryTokens;
+  try {
+    const { getRequestGoogleTokens } = require('./authContext');
+    const c = getRequestGoogleTokens();
+    if (c && (c.refresh_token || c.access_token)) return c;
+  } catch (_) {
+    /* authContext no disponible o fuera de petición con contexto */
+  }
   const envTokens = process.env.GOOGLE_OAUTH_TOKENS_JSON;
   if (envTokens) {
     try {

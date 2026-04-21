@@ -23,6 +23,8 @@ const QRCode = require('qrcode');
 const { buildVerificacionScanUrl, parseVerificacionToken } = require('../../../server/verificacionToken');
 const verificacionService = require('../../../server/verificacionService');
 const { buildVerificacionReportBuffer } = require('../../../server/verificacionReport');
+const { runWithGoogleOAuthFromRequest } = require('../../../server/authContext');
+const { encryptGoogleTokensToCookie, COOKIE_NAME_OAUTH } = require('../../../server/oauthCookie');
 
 const SESSION_COOKIE = 'tava_session';
 const SESSION_TTL_SECONDS = 60 * 60 * 12;
@@ -287,7 +289,42 @@ function pathIs(path, ...parts) {
   return path.length === parts.length && parts.every((p, i) => path[i] === p);
 }
 
-export async function GET(request, { params }) {
+/** Cookies Secure en producción/HTTPS; en http://localhost sin TLS el navegador no guarda Secure. */
+function isHttpsRequest(request) {
+  if (!request) return false;
+  if (String(request.headers.get('x-forwarded-proto') || '').toLowerCase() === 'https') return true;
+  try {
+    return new URL(request.url).protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+function sessionCookieBase(request) {
+  return {
+    path: '/',
+    httpOnly: true,
+    sameSite: 'lax',
+    secure: isHttpsRequest(request) || process.env.VERCEL === '1',
+  };
+}
+
+function clearGoogleOAuthCookie(request) {
+  return {
+    name: COOKIE_NAME_OAUTH,
+    value: '',
+    path: '/',
+    maxAge: 0,
+    sameSite: 'lax',
+    secure: isHttpsRequest(request) || process.env.VERCEL === '1',
+  };
+}
+
+export async function GET(request, ctx) {
+  return runWithGoogleOAuthFromRequest(request, () => getApiGET(request, ctx));
+}
+
+async function getApiGET(request, { params }) {
   const path = asPath(params);
   const sessionEmail = readSessionEmail(request);
 
@@ -495,7 +532,11 @@ export async function GET(request, { params }) {
   }
 }
 
-export async function POST(request, { params }) {
+export async function POST(request, ctx) {
+  return runWithGoogleOAuthFromRequest(request, () => getApiPOST(request, ctx));
+}
+
+async function getApiPOST(request, { params }) {
   const path = asPath(params);
   const sessionEmail = readSessionEmail(request);
   try {
@@ -515,12 +556,10 @@ export async function POST(request, { params }) {
       res.cookies.set({
         name: SESSION_COOKIE,
         value: token,
-        httpOnly: true,
-        sameSite: 'lax',
-        secure: process.env.NODE_ENV === 'production',
-        path: '/',
+        ...sessionCookieBase(request),
         maxAge: SESSION_TTL_SECONDS,
       });
+      res.cookies.set(clearGoogleOAuthCookie(request));
       return res;
     }
     if (pathIs(path, 'auth', 'allowed-emails')) {
@@ -543,6 +582,7 @@ export async function POST(request, { params }) {
         path: '/',
         maxAge: 0,
       });
+      res.cookies.set(clearGoogleOAuthCookie(request));
       return res;
     }
 
@@ -756,7 +796,11 @@ export async function POST(request, { params }) {
   }
 }
 
-export async function PUT(request, { params }) {
+export async function PUT(request, ctx) {
+  return runWithGoogleOAuthFromRequest(request, () => getApiPUT(request, ctx));
+}
+
+async function getApiPUT(request, { params }) {
   const path = asPath(params);
   const sessionEmail = readSessionEmail(request);
   try {
@@ -816,7 +860,11 @@ export async function PUT(request, { params }) {
   }
 }
 
-export async function DELETE(request, { params }) {
+export async function DELETE(request, ctx) {
+  return runWithGoogleOAuthFromRequest(request, () => getApiDELETE(request, ctx));
+}
+
+async function getApiDELETE(request, { params }) {
   const path = asPath(params);
   const sessionEmail = readSessionEmail(request);
   try {
@@ -829,6 +877,7 @@ export async function DELETE(request, { params }) {
         path: '/',
         maxAge: 0,
       });
+      res.cookies.set(clearGoogleOAuthCookie(request));
       return res;
     }
     if (pathIs(path, 'auth', 'allowed-emails')) {
